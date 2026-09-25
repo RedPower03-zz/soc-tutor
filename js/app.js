@@ -2,6 +2,7 @@
 import { CONTENT } from '../content/index.js';
 import * as E from './engine.js';
 import { loadState, saveState, clearState } from './storage.js';
+import { icon } from './icons.js';
 
 const app = document.getElementById('app');
 const idx = E.indexContent(CONTENT);
@@ -12,41 +13,57 @@ let session = null;
 // current question: { item, mode, note, order: [choice texts], selected: Set, answered, result }
 let current = null;
 
-const MODE_LABEL = {
-  learn: 'Learning',
-  review: 'Review',
-  probe: 'Building-block check',
-  remediate: 'Fixing a gap',
-  practice: 'Practice',
-  skill: 'Skill practice',
-  placement: 'Placement',
+// Severity classes: ok (green), info (cyan), warn (amber), crit (red), dim (grey)
+const MODE = {
+  learn: ['Learn', 'info'],
+  review: ['Review', 'warn'],
+  probe: ['Prereq check', 'info'],
+  remediate: ['Gap fix', 'crit'],
+  practice: ['Practice', 'ok'],
+  skill: ['Skill drill', 'info'],
+  placement: ['Placement', 'info'],
 };
-const STATUS_LABEL = {
-  mastered: '✓ Mastered',
-  learning: 'In progress',
-  new: 'Ready',
-  gap: '⚠ Gap',
-  locked: '🔒 Locked',
-  'coming-soon': 'Coming soon',
+const STATUS = {
+  mastered: ['Mastered', 'ok'],
+  learning: ['In progress', 'info'],
+  new: ['Ready', 'ready'],
+  gap: ['Gap', 'crit'],
+  locked: ['Locked', 'dim'],
+  'coming-soon': ['Planned', 'dim'],
 };
-const TYPE_LABEL = { mc: 'Multiple choice', multi: 'Select all that apply', text: 'Type your answer' };
-const NOTE_ICON = { probe: '🧩', gap: '🛠️', return: '↩️', info: '⭐' };
-const EVENT_ICON = {
-  'review-added': '🔁',
-  'review-requeued': '🔁',
-  'review-advanced': '📈',
-  'review-cleared': '✅',
-  'probe-start': '🧩',
-  'probe-solid': '👍',
-  'gap-found': '🛠️',
-  'gap-resolved': '✅',
-  'remediation-paused': '⏸️',
-  return: '↩️',
-  mastered: '⭐',
-  unlocked: '🔓',
+const TYPE_LABEL = { mc: 'Multiple choice', multi: 'Select all that apply', text: 'Typed answer' };
+const NOTE = {
+  probe: ['Prerequisite check', 'info', 'layers'],
+  gap: ['Gap detected', 'crit', 'alert'],
+  return: ['Returning', 'ok', 'ret'],
+  info: ['Status', 'ok', 'award'],
 };
+const EVENT = {
+  'review-added': ['Queued', 'warn'],
+  'review-requeued': ['Queued', 'warn'],
+  'review-advanced': ['Review', 'info'],
+  'review-cleared': ['Cleared', 'ok'],
+  'probe-start': ['Prereq', 'info'],
+  'probe-solid': ['Pass', 'ok'],
+  'gap-found': ['Gap', 'crit'],
+  'gap-resolved': ['Closed', 'ok'],
+  'remediation-paused': ['Paused', 'warn'],
+  return: ['Return', 'info'],
+  mastered: ['Mastered', 'ok'],
+  unlocked: ['Unlocked', 'ok'],
+};
+const TRACK_ICON = { host: 'host', network: 'network', soc: 'radar' };
+const TRACK_CODE = { host: 'HST', network: 'NET', soc: 'SOC' };
+const TRACK_LABEL = { soc: 'Level 2+ roadmap' }; // shorter heading for the phone layout
 
-const LOGO = `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4 8 13v17c0 15 10 26 24 30 14-4 24-15 24-30V13z" fill="#22d3ee"/><path d="M22 32l7 7 13-14" stroke="#0a0f1c" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// Short codes like HST-01 / NET-03 for the skill map.
+const SKILL_CODE = {};
+for (const t of CONTENT.tracks) {
+  CONTENT.skills
+    .filter((s) => s.track === t.id)
+    .sort((a, b) => a.order - b.order)
+    .forEach((s, i) => (SKILL_CODE[s.id] = `${TRACK_CODE[t.id] || t.id.slice(0, 3).toUpperCase()}-${String(i + 1).padStart(2, '0')}`));
+}
 
 // ------------------------------------------------------------------ helpers
 
@@ -57,10 +74,20 @@ function esc(s) {
 function rich(s) {
   return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 }
+/** Engine messages may contain emoji; the command-center look uses text tags instead. */
+function plainText(s) {
+  return String(s ?? '')
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '')
+    .replace(/\s+([.!?])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 // Mastery is a probability, so never show a flat 100%.
 const pct = (p) => Math.min(99, Math.round(p * 100));
+const pad = (n, w = 2) => String(n).padStart(w, '0');
 const skillName = (id) => idx.skillById.get(id)?.name || id;
 const bar = (p, cls = '') => `<div class="bar ${cls}"><span style="width:${pct(p)}%"></span></div>`;
+const chip = ([label, sev], extra = '') => `<span class="chip ${sev} ${extra}">${esc(label)}</span>`;
 
 function shuffle(arr) {
   const a = [...arr];
@@ -74,10 +101,37 @@ function shuffle(arr) {
 function render(html) {
   app.innerHTML = html;
   window.scrollTo(0, 0);
+  tickClock();
 }
 
 function save() {
   saveState(state);
+}
+
+// ------------------------------------------------------------------ status bar
+
+const sessionStart = Date.now();
+function clockText() {
+  const s = Math.floor((Date.now() - sessionStart) / 1000);
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+}
+function tickClock() {
+  for (const el of document.querySelectorAll('.js-clock')) el.textContent = clockText();
+}
+setInterval(tickClock, 1000);
+
+function statusBar() {
+  return `<div class="statusbar" role="banner">
+      <span class="sb-brand">${icon('shield')}<b>SOC Tutor</b><span class="sep">//</span><span class="sb-sub">Analyst training</span></span>
+      <span class="sb-live" title="Time in this session"><i class="dot" aria-hidden="true"></i><span class="sr-only">Session time </span><span class="js-clock">${clockText()}</span></span>
+    </div>`;
+}
+
+function panel({ title, icon: ic, meta = '', body, cls = '', hud = false, id = '' }) {
+  return `<section class="panel ${hud ? 'hud' : ''} ${cls}" ${id ? `id="${id}"` : ''}>
+      <header class="panel-head">${ic ? icon(ic) : ''}<span class="ph-title">${title}</span>${meta ? `<span class="ph-meta">${meta}</span>` : ''}</header>
+      <div class="panel-body">${body}</div>
+    </section>`;
 }
 
 // ------------------------------------------------------------------ home
@@ -88,77 +142,108 @@ function renderHome() {
   const prog = E.overallProgress(state, CONTENT);
   const firstVisit = state.turn === 0 && !state.placement?.done;
   const top = state.focus[state.focus.length - 1];
+  const openGaps = Object.values(state.gaps).filter((g) => !g.resolved).length;
 
   const welcome = firstVisit
-    ? `<section class="card">
-        <h2>Welcome, analyst 👋</h2>
-        <p class="muted">This tutor starts with host and network basics and adapts as you go: it re-asks what you miss and digs into the building blocks behind your mistakes.</p>
-        <p class="muted small">Want to skip what you already know? Take a quick placement check — one question per skill (${idx.activeSkills.length} total). You can stop at any time.</p>
-        <button class="btn primary" data-action="placement">Take the placement check</button>
-        <button class="btn secondary" data-action="skip-placement">Start from the basics</button>
-      </section>`
+    ? panel({
+        title: 'Analyst onboarding',
+        icon: 'terminal',
+        hud: true,
+        cls: 'welcome',
+        body: `<p class="lead">Train like a SOC analyst, starting with host and network basics.</p>
+          <p class="muted">The tutor adapts as you go: it re-asks what you miss and digs into the building blocks behind your mistakes.</p>
+          <p class="muted small">Know some of this already? Run the placement check: one question per skill (${idx.activeSkills.length} total). You can stop at any time.</p>
+          <button class="btn primary" data-action="placement">${icon('target')}Run placement check</button>
+          <button class="btn secondary" data-action="skip-placement">${icon('play')}Start from the basics</button>`,
+      })
     : '';
 
   const focusBanner = top
-    ? `<div class="banner ${top.kind === 'probe' ? 'probe' : 'gap'}"><span class="ico">${top.kind === 'probe' ? '🧩' : '🛠️'}</span>
-        <div>${top.kind === 'probe' ? `The tutor is checking a building block: <b>${esc(skillName(top.skillId))}</b>` : `Working on a gap: <b>${esc(skillName(top.skillId))}</b>`}, then back to ${esc(skillName(top.returnTo))}.</div></div>`
+    ? `<div class="alert ${top.kind === 'probe' ? 'info' : 'crit'}" role="status">
+        <div class="alert-tag">${icon(top.kind === 'probe' ? 'layers' : 'alert')}<span>${top.kind === 'probe' ? 'Prerequisite check active' : 'Gap remediation active'}</span></div>
+        <div class="alert-msg">${top.kind === 'probe' ? 'Checking building block' : 'Working on gap'}: <b>${esc(skillName(top.skillId))}</b>, then back to ${esc(skillName(top.returnTo))}.</div>
+      </div>`
     : '';
 
-  const hero = `<section class="card hero">
-      <h1>Level 1 · Host &amp; Network Basics</h1>
-      <p class="muted small">Master every skill to unlock Level 2 SOC analyst tracks.</p>
-      <div class="stats">
-        <div class="stat"><b>${prog.mastered}/${prog.total}</b><span>Mastered</span></div>
-        <div class="stat"><b>${pct(prog.average)}%</b><span>Avg mastery</span></div>
-        <div class="stat"><b>${prog.answered}</b><span>Answered</span></div>
+  const segs = idx.activeSkills
+    .map((s) => {
+      const st = E.skillStatus(state, CONTENT, s.id);
+      return `<i class="seg ${st}" title="${esc(s.name)}: ${STATUS[st][0]}"></i>`;
+    })
+    .join('');
+
+  const hero = panel({
+    title: 'Analyst readiness',
+    icon: 'chart',
+    meta: 'Level 1',
+    hud: true,
+    cls: 'hero',
+    body: `
+      <div class="readiness">
+        <div class="readout-block">
+          <div class="readout big">${pct(prog.average)}<small>%</small></div>
+          <div class="label">Avg mastery</div>
+        </div>
+        <div class="seg-block">
+          <div class="label row"><span>Skills mastered</span><span class="mono"><b class="ok-text">${prog.mastered}</b>/${prog.total}</span></div>
+          <div class="segbar" style="--n:${idx.activeSkills.length}" aria-label="${prog.mastered} of ${prog.total} skills mastered">${segs}</div>
+          <div class="legend"><span class="lg ok">Mastered</span><span class="lg info">Active</span><span class="lg crit">Gap</span><span class="lg dim">Locked</span></div>
+        </div>
       </div>
-      ${bar(prog.mastered / Math.max(1, prog.total), 'ok')}
-      ${firstVisit ? '' : `<button class="btn primary" data-action="continue">${prog.answered ? 'Continue learning' : 'Start learning'} →</button>`}
-      <button class="btn secondary" data-action="review" ${prog.reviewCount ? '' : 'disabled'}>
-        Review missed items <span class="badge ${prog.reviewCount ? '' : 'zero'}">${prog.reviewCount}</span>
+      <div class="stats">
+        <div class="stat"><b class="mono">${pad(prog.answered, 3)}</b><span>Answered</span></div>
+        <div class="stat ${prog.reviewCount ? 'warn' : ''}"><b class="mono">${pad(prog.reviewCount)}</b><span>To review</span></div>
+        <div class="stat ${openGaps ? 'crit' : ''}"><b class="mono">${pad(openGaps)}</b><span>Open gaps</span></div>
+      </div>
+      ${firstVisit ? '' : `<button class="btn primary" data-action="continue">${icon('play')}${prog.answered ? 'Continue learning' : 'Start learning'}</button>`}
+      <button class="btn secondary warn" data-action="review" ${prog.reviewCount ? '' : 'disabled'}>
+        ${icon('review')}Review missed items<span class="count">${pad(prog.reviewCount)}</span>
       </button>
-      <button class="btn secondary" data-action="report">📊 Gap report</button>
-    </section>`;
+      <button class="btn secondary" data-action="report">${icon('chart')}Gap report</button>`,
+  });
 
   const tracks = CONTENT.tracks
     .map((t) => {
       const skills = CONTENT.skills.filter((s) => s.track === t.id).sort((a, b) => a.order - b.order);
       const masteredCount = skills.filter((s) => E.skillStatus(state, CONTENT, s.id) === 'mastered').length;
       return `<div class="track">
-        <div class="track-head"><span>${t.icon}</span><h3>${esc(t.name)}</h3>
-          <span class="count">${t.comingSoon ? 'Roadmap' : `${masteredCount}/${skills.length} mastered`}</span></div>
-        ${skills.map(renderSkillCard).join('')}
+        <div class="track-head">${icon(TRACK_ICON[t.id] || 'grid')}<h3>${esc(TRACK_LABEL[t.id] || t.name)}</h3>
+          <span class="count">${t.comingSoon ? `${skills.length} planned` : `${masteredCount}/${skills.length} mastered`}</span></div>
+        <div class="skill-list">${skills.map(renderSkillRow).join('')}</div>
       </div>`;
     })
     .join('');
 
   render(`
-    <header class="topbar">
-      <div class="brand">${LOGO}<div>SOC Tutor<small>Adaptive analyst training</small></div></div>
-    </header>
+    ${statusBar()}
     ${welcome}
     ${focusBanner}
     ${hero}
-    <div class="section-title"><span>Skill map</span><span>Tap a skill to practice it</span></div>
-    ${tracks}
+    ${panel({ title: 'Skill map', icon: 'grid', meta: 'Tap a skill to drill it', cls: 'skillmap', body: tracks })}
     <footer class="footer">
       <p>Progress is saved in this browser on this device.</p>
-      <button class="btn danger" data-action="reset">Reset progress</button>
+      <button class="btn danger" data-action="reset">${icon('reset')}Reset progress</button>
     </footer>
   `);
 }
 
-function renderSkillCard(s) {
+function renderSkillRow(s) {
   const status = E.skillStatus(state, CONTENT, s.id);
   const ss = state.skills[s.id];
   const clickable = ['new', 'learning', 'gap', 'mastered'].includes(status);
-  const needs = s.prereqs.length ? `Needs: ${s.prereqs.map((p) => esc(skillName(p))).join(', ')}` : 'No prerequisites';
-  const right = status === 'coming-soon' ? '' : ss && ss.attempts ? `${pct(ss.p)}% · ${ss.attempts} answered` : '';
-  const barCls = status === 'mastered' ? 'ok' : status === 'gap' ? 'gap' : '';
-  return `<button class="skill s-${status}" ${clickable ? `data-action="skill" data-skill="${s.id}"` : 'disabled'} aria-label="${esc(s.name)}: ${STATUS_LABEL[status]}">
-      <div class="skill-top"><span class="skill-name">${esc(s.name)}</span><span class="chip ${status}">${STATUS_LABEL[status]}</span></div>
-      ${status === 'coming-soon' ? `<div class="small muted">${esc(s.summary)}</div>` : `<div class="bar thin ${barCls}"><span style="width:${ss ? pct(ss.p) : 0}%"></span></div>`}
-      <div class="skill-meta"><span>${needs}</span><span>${right}</span></div>
+  const needs = s.prereqs.length ? `Req: ${s.prereqs.map((p) => esc(skillName(p))).join(', ')}` : 'No prerequisites';
+  const p = ss && ss.attempts ? ss.p : 0; // untouched skills show an empty bar
+  return `<button class="skill s-${status}" ${clickable ? `data-action="skill" data-skill="${s.id}"` : 'disabled'} aria-label="${esc(s.name)}: ${STATUS[status][0]}">
+      <span class="sk-code">${SKILL_CODE[s.id]}</span>
+      <span class="sk-main">
+        <span class="sk-top"><span class="sk-name">${esc(s.name)}</span>${chip(STATUS[status])}</span>
+        ${
+          status === 'coming-soon'
+            ? `<span class="sk-meta">${esc(s.summary)}</span>`
+            : `<span class="sk-bar">${bar(p, status === 'mastered' ? 'ok' : status === 'gap' ? 'crit' : '')}<span class="sk-pct">${ss && ss.attempts ? `${pct(p)}%` : '--'}</span></span>
+               <span class="sk-meta"><span>${needs}</span>${ss && ss.attempts ? `<span class="mono">${ss.correct}/${ss.attempts}</span>` : ''}</span>`
+        }
+      </span>
     </button>`;
 }
 
@@ -174,7 +259,7 @@ function showNext() {
   save();
   if (!next) {
     if (session.type === 'placement') return finishPlacement(false);
-    if (session.type === 'review') return renderDone('All caught up! 🎉', 'No missed questions are waiting for review right now.');
+    if (session.type === 'review') return renderDone('Review queue clear', 'All caught up. No missed questions are waiting for review right now.');
     return renderHome();
   }
   const { item } = next;
@@ -188,53 +273,66 @@ function showNext() {
   renderQuestion();
 }
 
+function snippetHtml(text) {
+  const lines = String(text).split('\n');
+  return `<div class="evidence">
+      <div class="evidence-head"><span>${icon('terminal')}Evidence</span><span>${lines.length} line${lines.length === 1 ? '' : 's'}</span></div>
+      <pre class="snippet">${lines.map((l) => `<span class="ln">${esc(l) || ' '}</span>`).join('')}</pre>
+    </div>`;
+}
+
 function renderQuestion() {
   const { item, mode, note } = current;
   const ss = state.skills[item.skill];
   const isPlacement = mode === 'placement';
   const pl = state.placement;
+  const [modeLabel, modeSev] = MODE[mode] || [mode, 'info'];
 
-  const noteHtml = note
-    ? `<div class="banner ${note.type || 'info'}"><span class="ico">${NOTE_ICON[note.type] || 'ℹ️'}</span><div>${esc(note.text)}</div></div>`
-    : '';
+  const noteHtml = note ? noteBanner(note) : '';
 
   let answers = '';
   if (item.type === 'text') {
-    answers = `<input id="answer-text" class="text-answer" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="Type your answer" aria-label="Your answer" />`;
+    answers = `<label class="field-label" for="answer-text">Your answer</label>
+      <input id="answer-text" class="text-answer" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="Type answer and press Enter" />`;
   } else {
-    answers = `${item.type === 'multi' ? '<p class="hint">Select every correct option, then check.</p>' : ''}
+    answers = `${item.type === 'multi' ? '<p class="hint">Select every correct option, then submit.</p>' : ''}
       <div class="choices" role="${item.type === 'multi' ? 'group' : 'radiogroup'}">
         ${current.order
           .map(
             (c, i) =>
               `<button class="choice ${item.type === 'multi' ? 'multi' : ''}" data-action="choose" data-index="${i}" role="${item.type === 'multi' ? 'checkbox' : 'radio'}" aria-checked="false">
-                <span class="mark"></span><span>${rich(c)}</span></button>`,
+                <span class="key">${String.fromCharCode(65 + i)}</span><span class="choice-text">${rich(c)}</span></button>`,
           )
           .join('')}
       </div>`;
   }
 
+  const diff = `<span class="diff" aria-label="Difficulty ${item.difficulty} of 3">${'<i class="on"></i>'.repeat(item.difficulty)}${'<i></i>'.repeat(3 - item.difficulty)}</span>`;
+
   render(`
+    ${statusBar()}
     <header class="qbar">
-      <button class="icon-btn" data-action="home" aria-label="Back to dashboard">✕</button>
+      <button class="icon-btn" data-action="home" aria-label="Back to dashboard">${icon('x')}</button>
       <div class="qbar-mid">
-        <span class="mode ${mode}">${MODE_LABEL[mode] || mode}</span>
+        ${chip([modeLabel, modeSev], 'mode')}
         <span class="skill-label">${esc(skillName(item.skill))}</span>
       </div>
       ${
         isPlacement
-          ? `<div class="qmastery"><b>${pl.index + 1}/${pl.queue.length}</b>placement</div>`
-          : `<div class="qmastery"><b id="q-mastery">${pct(ss.p)}%</b>mastery${bar(ss.p, 'thin')}</div>`
+          ? `<div class="qread"><b class="readout">${pad(pl.index + 1)}<small>/${pad(pl.queue.length)}</small></b><span class="label">Placement</span></div>`
+          : `<div class="qread"><b class="readout" id="q-mastery">${pct(ss.p)}<small>%</small></b><span class="label">Mastery</span></div>`
       }
     </header>
     ${noteHtml}
-    <article class="card question" data-item-id="${item.id}" data-skill="${item.skill}" data-mode="${mode}">
-      <div class="q-meta"><span>${TYPE_LABEL[item.type]}</span><span>Difficulty <span class="dots">${'●'.repeat(item.difficulty)}${'○'.repeat(3 - item.difficulty)}</span></span></div>
-      <p class="prompt">${rich(item.prompt)}</p>
-      ${item.snippet ? `<div class="snippet-label">Evidence</div><pre class="snippet">${esc(item.snippet)}</pre>` : ''}
-      ${answers}
-      <button id="submit-btn" class="btn primary" data-action="submit" ${item.type === 'text' ? '' : 'disabled'}>Check answer</button>
-      ${isPlacement ? '<button class="btn ghost" style="width:100%;margin-top:6px" data-action="end-placement">Skip the rest of placement</button>' : ''}
+    <article class="panel hud question" data-item-id="${item.id}" data-skill="${item.skill}" data-mode="${mode}">
+      <header class="panel-head"><span class="ph-title">Item ${esc(item.id.toUpperCase())}</span><span class="ph-meta">${TYPE_LABEL[item.type]} ${diff}</span></header>
+      <div class="panel-body">
+        <p class="prompt">${rich(item.prompt)}</p>
+        ${item.snippet ? snippetHtml(item.snippet) : ''}
+        ${answers}
+        <button id="submit-btn" class="btn primary" data-action="submit" ${item.type === 'text' ? '' : 'disabled'}>${icon('check')}Submit answer</button>
+        ${isPlacement ? `<button class="btn ghost" data-action="end-placement">Skip the rest of placement</button>` : ''}
+      </div>
     </article>
     <div id="feedback"></div>
   `);
@@ -245,6 +343,14 @@ function renderQuestion() {
       if (e.key === 'Enter') submitAnswer();
     });
   }
+}
+
+function noteBanner(note) {
+  const [label, sev, ic] = NOTE[note.type] || NOTE.info;
+  return `<div class="alert ${sev}" role="status">
+      <div class="alert-tag">${icon(ic)}<span>Tutor // ${label}</span></div>
+      <div class="alert-msg">${esc(plainText(note.text))}</div>
+    </div>`;
 }
 
 function choose(i) {
@@ -285,7 +391,7 @@ function submitAnswer() {
   renderFeedback(response);
 }
 
-function renderFeedback(response) {
+function renderFeedback() {
   const { item, result, mode } = current;
   const correct = result.correct;
 
@@ -301,57 +407,71 @@ function renderFeedback(response) {
       const picked = current.selected.has(Number(el.dataset.index));
       el.disabled = true;
       el.classList.remove('selected');
-      const mark = el.querySelector('.mark');
+      const key = el.querySelector('.key');
       if (right.has(text) && picked) {
         el.classList.add('correct');
-        mark.textContent = '✓';
+        key.innerHTML = icon('check');
       } else if (right.has(text)) {
         el.classList.add(item.type === 'multi' ? 'missed' : 'correct');
-        if (item.type !== 'multi') mark.textContent = '✓';
+        key.innerHTML = icon('check');
       } else if (picked) {
         el.classList.add('wrong');
-        mark.textContent = '✕';
+        key.innerHTML = icon('x');
       }
     });
   }
-  const submit = document.getElementById('submit-btn');
-  submit.remove();
+  document.getElementById('submit-btn').remove();
   app.querySelector('[data-action="end-placement"]')?.remove();
 
   let answerHtml = '';
   if (!correct) {
+    let body;
     if (item.type === 'text') {
-      answerHtml = `<div class="correct-answer"><b>Accepted answer:</b> ${esc(item.accept[0])}${item.accept.length > 1 ? ` <span class="muted small">(also: ${item.accept.slice(1).map(esc).join(', ')})</span>` : ''}</div>`;
+      body = `<span class="mono">${esc(item.accept[0])}</span>${item.accept.length > 1 ? `<div class="muted small">Also accepted: ${item.accept.slice(1).map(esc).join(', ')}</div>` : ''}`;
     } else if (item.type === 'mc') {
-      answerHtml = `<div class="correct-answer"><b>Correct answer:</b> ${rich(item.answer)}</div>`;
+      body = rich(item.answer);
     } else {
-      answerHtml = `<div class="correct-answer"><b>Correct answers:</b><ul>${item.answer.map((a) => `<li>${rich(a)}</li>`).join('')}</ul></div>`;
+      body = `<ul>${item.answer.map((a) => `<li>${rich(a)}</li>`).join('')}</ul>`;
     }
+    answerHtml = `<div class="block ok-block"><div class="label">${item.type === 'multi' ? 'Correct answers' : item.type === 'text' ? 'Accepted answer' : 'Correct answer'}</div><div>${body}</div></div>`;
   }
 
   const isPlacement = mode === 'placement';
+  const up = result.after >= result.before;
+  const diffPts = Math.abs(pct(result.after) - pct(result.before));
   const delta = isPlacement
     ? ''
-    : `<div class="delta"><span>${esc(skillName(item.skill))}</span>${bar(result.after, result.after >= E.PARAMS.masteryThreshold ? 'ok' : '')}<span><b>${pct(result.before)}% → ${pct(result.after)}%</b></span></div>`;
+    : `<div class="delta">
+        <div class="label row"><span>Skill mastery</span>${diffPts === 0 ? '<span class="nowrap muted">No change</span>' : `<span class="nowrap ${up ? 'ok-text' : 'crit-text'}">${up ? '▲' : '▼'} ${diffPts} pts</span>`}</div>
+        <div class="delta-row">${bar(result.after, result.after >= E.PARAMS.masteryThreshold ? 'ok' : up ? '' : 'crit')}<span class="mono"><span class="muted">${pct(result.before)}%</span> → <b>${pct(result.after)}%</b></span></div>
+      </div>`;
   const events = result.events.length
-    ? `<ul class="events">${result.events.map((e) => `<li class="${e.type}"><span aria-hidden="true">${EVENT_ICON[e.type] || '•'}</span> ${esc(e.text)}</li>`).join('')}</ul>`
+    ? `<div class="label">Event log</div><ul class="evlog">${result.events
+        .map((e) => {
+          const [tag, sev] = EVENT[e.type] || ['Info', 'info'];
+          return `<li class="${e.type}"><span class="tag ${sev}">${tag}</span><span>${esc(plainText(e.text))}</span></li>`;
+        })
+        .join('')}</ul>`
     : '';
 
   const qm = document.getElementById('q-mastery');
-  if (qm) qm.textContent = `${pct(result.after)}%`;
+  if (qm) qm.innerHTML = `${pct(result.after)}<small>%</small>`;
 
   const lastPlacement = isPlacement && state.placement.index >= state.placement.queue.length;
   document.getElementById('feedback').innerHTML = `
-    <section class="card feedback ${correct ? 'ok' : 'bad'}" id="feedback-card">
-      <h2>${correct ? '✓ Correct' : '✕ Not quite'}</h2>
-      ${answerHtml}
-      <p class="explanation">${rich(item.explanation)}</p>
-      ${delta}
-      ${events}
-      <button id="next-btn" class="btn primary" data-action="next">${lastPlacement ? 'See placement results →' : 'Next question →'}</button>
-      <button class="btn ghost" style="width:100%;margin-top:4px" data-action="home">Back to dashboard</button>
+    <section class="panel feedback ${correct ? 'fb-ok' : 'fb-bad'}" id="feedback-card">
+      <header class="panel-head">${icon(correct ? 'check' : 'x')}<span class="ph-title">${correct ? 'Correct' : 'Incorrect'}</span><span class="ph-meta">Result</span></header>
+      <div class="panel-body">
+        ${answerHtml}
+        <div class="label">Analysis</div>
+        <p class="explanation">${rich(item.explanation)}</p>
+        ${delta}
+        ${events}
+        <button id="next-btn" class="btn primary" data-action="next">${lastPlacement ? 'See placement results' : 'Next question'}${icon('next')}</button>
+        <button class="btn ghost" data-action="home">Back to dashboard</button>
+      </div>
     </section>`;
-  document.getElementById('feedback-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('feedback-card').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
 }
 
 // ------------------------------------------------------------------ placement
@@ -369,22 +489,24 @@ function finishPlacement(skipped) {
   renderDone(
     'Placement complete',
     asked
-      ? `You answered ${pl.correct} of ${asked} correctly. Your skill map has been seeded — skills you already know will be mastered quickly, and the tutor will focus on the rest.`
-      : 'No problem — the tutor will start from the basics and adapt as you go.',
-    { continueLabel: 'Start learning →' },
+      ? `You answered ${pl.correct} of ${asked} correctly. Your skill map has been seeded: skills you already know will be mastered quickly, and the tutor will focus on the rest.`
+      : 'No problem. The tutor will start from the basics and adapt as you go.',
+    { continueLabel: 'Start learning' },
   );
 }
 
 function renderDone(title, text, { continueLabel } = {}) {
   session = null;
   render(`
-    <header class="topbar"><div class="brand">${LOGO}<div>SOC Tutor<small>Adaptive analyst training</small></div></div></header>
-    <section class="card">
-      <h2>${esc(title)}</h2>
-      <p class="muted">${esc(text)}</p>
-      ${continueLabel ? `<button class="btn primary" data-action="continue">${esc(continueLabel)}</button>` : ''}
-      <button class="btn secondary" data-action="home">Back to dashboard</button>
-    </section>`);
+    ${statusBar()}
+    ${panel({
+      title: esc(title),
+      icon: 'check',
+      hud: true,
+      body: `<p class="muted">${esc(text)}</p>
+        ${continueLabel ? `<button class="btn primary" data-action="continue">${icon('play')}${esc(continueLabel)}</button>` : ''}
+        <button class="btn secondary" data-action="home">${icon('back')}Back to dashboard</button>`,
+    })}`);
 }
 
 // ------------------------------------------------------------------ report
@@ -392,77 +514,92 @@ function renderDone(title, text, { continueLabel } = {}) {
 function renderReport() {
   session = null;
   const r = E.gapReport(state, CONTENT);
-  const list = (items, fn, empty) => (items.length ? `<ul class="report-list">${items.map(fn).join('')}</ul>` : `<p class="empty">${empty}</p>`);
-
+  const list = (items, fn, empty) => (items.length ? `<ul class="rows">${items.map(fn).join('')}</ul>` : `<p class="empty">${empty}</p>`);
   const top = state.focus[state.focus.length - 1];
   const recIsFocus = r.recommendation && top && top.skillId === r.recommendation.skillId;
+
   const rec = r.recommendation
-    ? `<section class="card recommend">
-        <h2>🎯 Recommended next focus</h2>
-        <p><b>${esc(skillName(r.recommendation.skillId))}</b></p>
-        <p class="muted small">${esc(r.recommendation.reason)}</p>
-        ${
-          recIsFocus
-            ? '<button class="btn primary" data-action="continue">Fix this gap now →</button>'
-            : `<button class="btn primary" data-action="skill" data-skill="${r.recommendation.skillId}">Practice this skill →</button>`
-        }
-      </section>`
+    ? panel({
+        title: 'Recommended next focus',
+        icon: 'target',
+        hud: true,
+        cls: 'recommend',
+        body: `<div class="rec-name"><span class="sk-code">${SKILL_CODE[r.recommendation.skillId] || ''}</span>${esc(skillName(r.recommendation.skillId))}</div>
+          <p class="muted small">${esc(r.recommendation.reason)}</p>
+          ${
+            recIsFocus
+              ? `<button class="btn primary" data-action="continue">${icon('play')}Fix this gap now</button>`
+              : `<button class="btn primary" data-action="skill" data-skill="${r.recommendation.skillId}">${icon('play')}Practice this skill</button>`
+          }`,
+      })
     : '';
 
+  const gapRow = (g, root) => `<li class="${root ? 'root' : ''}">
+      <div class="row"><span class="name">${esc(g.name)}</span>${chip([root ? 'Root gap' : 'Gap', root ? 'crit' : 'warn'])}</div>
+      <div class="row sub"><span>Needed for: ${g.neededFor.map(esc).join(', ')}</span><span class="mono">${pct(g.p)}%</span></div>
+    </li>`;
+
   render(`
+    ${statusBar()}
     <header class="qbar">
-      <button class="icon-btn" data-action="home" aria-label="Back to dashboard">←</button>
-      <div class="qbar-mid"><span class="mode learn">Gap report</span><span class="skill-label">Where you stand and what to fix next</span></div>
+      <button class="icon-btn" data-action="home" aria-label="Back to dashboard">${icon('back')}</button>
+      <div class="qbar-mid">${chip(['Gap report', 'info'], 'mode')}<span class="skill-label">Where you stand and what to fix next</span></div>
     </header>
-    <section class="card hero">
-      <div class="stats" style="margin-top:0">
-        <div class="stat"><b>${r.answered}</b><span>Answered</span></div>
-        <div class="stat"><b>${r.answered ? pct(r.accuracy) + '%' : '–'}</b><span>Accuracy</span></div>
-        <div class="stat"><b>${r.reviewCount}</b><span>To review</span></div>
-      </div>
-    </section>
+    ${panel({
+      title: 'Session summary',
+      icon: 'chart',
+      cls: 'summary',
+      body: `<div class="stats four">
+          <div class="stat"><b class="mono">${pad(r.answered, 3)}</b><span>Answered</span></div>
+          <div class="stat"><b class="mono">${r.answered ? pct(r.accuracy) + '%' : '--'}</b><span>Accuracy</span></div>
+          <div class="stat ${r.reviewCount ? 'warn' : ''}"><b class="mono">${pad(r.reviewCount)}</b><span>To review</span></div>
+          <div class="stat ${r.rootGaps.length ? 'crit' : ''}"><b class="mono">${pad(r.rootGaps.length)}</b><span>Root gaps</span></div>
+        </div>`,
+    })}
     ${rec}
-    <section class="card">
-      <h2>🧩 Root gaps identified</h2>
-      <p class="muted small">Building blocks the tutor found to be behind your mistakes elsewhere.</p>
-      ${list(
-        r.rootGaps,
-        (g) => `<li class="root-gap"><div class="row"><span class="name">${esc(g.name)}</span><span class="chip gap">${pct(g.p)}%</span></div>
-          <div class="sub">Needed for: ${g.neededFor.map(esc).join(', ')}</div></li>`,
-        'None found so far. When you miss questions, the tutor checks the prerequisites and lists any weak ones here.',
-      )}
-      ${
-        r.otherGaps.length
-          ? `<p class="muted small" style="margin-top:12px">Also flagged (will improve once the root gap is fixed):</p>${list(r.otherGaps, (g) => `<li><div class="row"><span class="name">${esc(g.name)}</span><span class="chip gap">${pct(g.p)}%</span></div><div class="sub">Needed for: ${g.neededFor.map(esc).join(', ')}</div></li>`, '')}`
-          : ''
-      }
-      ${r.resolvedGaps.length ? `<p class="muted small" style="margin-top:12px">Gaps you've already closed:</p><div class="pill-list">${r.resolvedGaps.map((g) => `<span class="pill">✓ ${esc(g.name)}</span>`).join('')}</div>` : ''}
-    </section>
-    <section class="card">
-      <h2>📉 Weak skills</h2>
-      ${list(
+    ${panel({
+      title: 'Root gaps identified',
+      icon: 'alert',
+      cls: r.rootGaps.length ? 'crit-panel' : '',
+      meta: r.rootGaps.length ? `${r.rootGaps.length} open` : 'None',
+      body: `<p class="muted small">Building blocks the tutor found behind your mistakes elsewhere.</p>
+        ${list(r.rootGaps, (g) => gapRow(g, true), 'None found so far. When you miss questions, the tutor checks the prerequisites and lists any weak ones here.')}
+        ${r.otherGaps.length ? `<div class="label spaced">Also flagged (will improve once the root gap is fixed)</div>${list(r.otherGaps, (g) => gapRow(g, false), '')}` : ''}
+        ${r.resolvedGaps.length ? `<div class="label spaced">Gaps closed</div><div class="pill-list">${r.resolvedGaps.map((g) => chip([g.name, 'ok'], 'pill')).join('')}</div>` : ''}`,
+    })}
+    ${panel({
+      title: 'Weak skills',
+      icon: 'list',
+      meta: r.weak.length ? `${r.weak.length}` : '',
+      body: list(
         r.weak,
-        (s) => `<li><div class="row"><span class="name">${esc(s.name)}</span><span class="small muted">${pct(s.p)}%</span></div>
-          ${bar(s.p, 'thin')}
-          <div class="sub">${s.correct}/${s.attempts} correct${s.outstanding ? ` · ${s.outstanding} waiting for review` : ''}</div></li>`,
+        (s) => `<li>
+          <div class="row"><span class="name">${esc(s.name)}</span><span class="mono">${pct(s.p)}%</span></div>
+          ${bar(s.p, s.status === 'gap' ? 'crit' : '')}
+          <div class="row sub"><span>${s.correct}/${s.attempts} correct</span>${s.outstanding ? `<span class="warn-text">${s.outstanding} awaiting review</span>` : ''}</div></li>`,
         'No weak skills right now.',
-      )}
-    </section>
-    <section class="card">
-      <h2>❌ Most-missed questions</h2>
-      ${list(
+      ),
+    })}
+    ${panel({
+      title: 'Most-missed questions',
+      icon: 'x',
+      body: list(
         r.mostMissed,
-        (m) => `<li><div class="name small">${rich(m.prompt)}</div>
-          <div class="sub">${esc(m.skillName)} · missed ${m.misses}× of ${m.attempts}${m.inReview ? ' · in review list' : ' · cleared'}</div></li>`,
+        (m) => `<li>
+          <div class="row sub"><span class="mono">${esc(m.id.toUpperCase())} · ${esc(m.skillName)}</span></div>
+          <div class="q-excerpt">${rich(m.prompt)}</div>
+          <div class="row sub"><span class="mono crit-text">Missed ${m.misses}× / ${m.attempts}</span>${m.inReview ? '<span class="warn-text">In review queue</span>' : '<span class="ok-text">Cleared</span>'}</div></li>`,
         'Nothing missed yet.',
-      )}
-    </section>
-    <section class="card">
-      <h2>✅ Mastered skills</h2>
-      ${r.mastered.length ? `<div class="pill-list">${r.mastered.map((s) => `<span class="pill">${esc(s.name)}</span>`).join('')}</div>` : '<p class="empty">None yet — keep going!</p>'}
-    </section>
-    <button class="btn primary" data-action="continue">Continue learning →</button>
-    <button class="btn secondary" data-action="home">Back to dashboard</button>
+      ),
+    })}
+    ${panel({
+      title: 'Mastered skills',
+      icon: 'award',
+      meta: `${r.mastered.length}/${r.skills.length}`,
+      body: r.mastered.length ? `<div class="pill-list">${r.mastered.map((s) => chip([s.name, 'ok'], 'pill')).join('')}</div>` : '<p class="empty">None yet. Keep going!</p>',
+    })}
+    <button class="btn primary" data-action="continue">${icon('play')}Continue learning</button>
+    <button class="btn secondary" data-action="home">${icon('back')}Back to dashboard</button>
   `);
 }
 
