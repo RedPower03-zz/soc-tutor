@@ -170,7 +170,7 @@ test('ambiguous cases count toward the SIEM-case rank gates and the XP budget', 
   const b = G.xpBudget(CONTENT);
   assert.equal(b.siem, CONTENT.siemCases.reduce((a, c) => a + G.XP_RULES.siemCase[c.difficulty], 0));
   assert.ok(b.siem >= 780 + amb.reduce((a, c) => a + G.XP_RULES.siemCase[c.difficulty], 0));
-  assert.equal(b.atTotal.rank.id, G.reachableRank(CONTENT).id, 'the budget reaches the top rank the content opens');
+  assert.equal(G.reachableRank(CONTENT, b.total + 3 * G.MONTH_OF_REVIEWS).id, G.reachableRank(CONTENT).id, 'the budget plus sustained reviews reaches the top rank the content opens');
 });
 
 test('ambiguous cases unlock from their Level 1 skills', () => {

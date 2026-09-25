@@ -96,9 +96,10 @@ test('themes and titles are spread across the whole ladder', () => {
   for (const t of G.THEMES) assert.ok(G.RANKS.some((r) => r.id === t.rank), `${t.id} rank ${t.rank}`);
   assert.equal(idxs[0], 0);
   assert.ok(Math.max(...idxs) >= G.RANKS.length - 3, 'a theme near the top');
-  const reachable = G.rankIndex(G.reachableRank(CONTENT).id);
+  // content alone earns some themes; the top ones also need sustained review and practice
+  const reachable = G.rankIndex(G.reachableRank(CONTENT, G.xpBudget(CONTENT).total).id);
   const now = idxs.filter((i) => i <= reachable).length;
-  assert.ok(now >= 2 && now < G.THEMES.length - 2, 'some themes now, most later');
+  assert.ok(now >= 2 && now <= G.THEMES.length - 2, 'some themes from content, the top ones later');
 });
 
 test('next-rank requirements: XP row first, then gate rows with progress', () => {

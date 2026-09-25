@@ -227,7 +227,7 @@ export const SKILLS = [
     comingSoon: true,
   },
 
-  // ---------------- Level 3: Advanced (coming soon) ----------------
+  // ---------------- Level 3: Advanced (roadmap entries; built in content/l3/) ----------------
   {
     id: 'l3-pki',
     name: 'PKI & certificates',

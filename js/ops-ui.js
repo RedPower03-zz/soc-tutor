@@ -271,7 +271,7 @@ export function renderSiemList() {
       const status = !open ? ['Locked', 'dim'] : rec?.solved ? [`Solved · ${rec.best}`, 'ok'] : active?.caseId === c.id ? ['In progress', 'info'] : rec ? [`Best ${rec.best}`, 'warn'] : ['New', 'ready'];
       const req = c.requires.skills.map((s) => `<span class="req-skill ${learned.includes(s) ? 'ok' : ''}">${icon(learned.includes(s) ? 'check' : 'lock')}${esc(ctx.skillName(s))}</span>`).join('');
       return `<li class="case-card ${open ? '' : 'locked'} ${rec?.solved ? 'solved' : ''} ${c.ambiguous ? 'amb' : ''}">
-          <div class="case-top"><span class="mono case-id">${esc(c.alert.id)}</span>${diffPips(c.difficulty)}<span class="case-diff mono">${DIFF[c.difficulty][0]}</span>${c.tier === 'l2' ? '<span class="case-tier">L2</span>' : ''}${ctx.chip(status)}</div>
+          <div class="case-top"><span class="mono case-id">${esc(c.alert.id)}</span>${diffPips(c.difficulty)}<span class="case-diff mono">${DIFF[c.difficulty][0]}</span>${c.tier && c.tier !== 'l1' ? `<span class="case-tier">${esc(c.tier.toUpperCase())}</span>` : ''}${ctx.chip(status)}</div>
           <div class="case-title">${esc(c.title)}${c.ambiguous ? ambTag() : ''}</div>
           <div class="case-alert small">${ctx.chip(SEV[c.alert.severity] || ['Alert', 'warn'])}<span>${esc(c.alert.name)}</span></div>
           <p class="small muted">${esc(c.summary)}</p>

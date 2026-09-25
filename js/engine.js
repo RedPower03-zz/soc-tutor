@@ -925,7 +925,7 @@ export function nextItem(st, content, { session = 'auto', skillId = null, rng = 
   const weakest = [...idx.activeSkills].sort((a, b) => st.skills[a.id].p - st.skills[b.id].p)[0];
   const firstPractice = st.history[st.history.length - 1]?.mode !== 'practice';
   const practiceNote = firstPractice
-    ? { type: 'info', text: 'All Level 1 skills mastered! Keep sharp with mixed practice while Level 2 is built.' }
+    ? { type: 'info', text: 'Every skill on the map is mastered! Keep sharp with mixed practice and your daily reviews.' }
     : null;
   return wrap(pickItemForSkill(st, content, weakest.id, { rng }), 'practice', note || practiceNote);
 }

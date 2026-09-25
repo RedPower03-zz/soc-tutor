@@ -1049,7 +1049,7 @@ textarea.text-answer.writeup { resize: vertical; min-height: 96px; field-sizing:
 .oc-title b { font: 700 0.95rem/1.3 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; }
 .oc-note { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 0; padding: 8px 10px; border: 1px dashed rgba(var(--accent-rgb), 0.45); color: var(--accent-ink, var(--text)); background: rgba(var(--accent-rgb), 0.05); }
 .oc-note .ico { width: 14px; height: 14px; margin-top: 2px; color: var(--accent); }
-.s-idp { --src: #9be15d; } .s-ops { --src: #e2c275; } .s-email { --src: #f59e9e; } .s-sandbox { --src: #b3e0ff; }
+.s-idp { --src: #9be15d; } .s-ops { --src: #e2c275; } .s-email { --src: #f59e9e; } .s-sandbox { --src: #b3e0ff; } .s-cloud { --src: #ffb86b; }
 .sf-sources:has(> .src-chip:nth-child(6)) { gap: 4px; }
 .sf-sources:has(> .src-chip:nth-child(6)) .src-chip { flex: 1 1 0; min-width: 0; padding: 7px 2px; gap: 3px; font-size: 0.72rem; }
 

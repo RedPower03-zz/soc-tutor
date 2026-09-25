@@ -27,13 +27,13 @@ Skills unlock in order. For example, *Subnetting* opens once you've mastered *IP
 
 ### Curriculum tiers
 
-The course is planned as three curriculum levels (`content/career.js` → `TIERS`). The career ladder is spread across all three, so finishing Level 1 is about a third of the way up, finishing Level 1 and Level 2 is about 60% (Senior Analyst I), and there is room to grow as new tracks arrive.
+The course is planned as three curriculum levels (`content/career.js` → `TIERS`). The career ladder is spread across all three, so finishing Level 1 is about a third of the way up, finishing Level 1 and Level 2 is about 60% (Senior Analyst I), and finishing Level 3 content lands on Incident Responder; the last ranks also need months of steady review.
 
 | Tier | Tracks | Status |
 | --- | --- | --- |
 | **Level 1 Foundations** | Host basics, Network basics (13 skills) plus SIEM investigations and the *First shift* capstone | Live |
 | **Level 2 SOC Operations** | Alert triage, SIEM & log analysis, phishing analysis, malware analysis basics, MITRE ATT&CK, incident response, threat hunting (7 skills) plus 4 Level 2 SIEM cases and the *Night-shift lead* capstone | Live |
-| **Level 3 Advanced** | PKI & certificates, cryptography, identity/AD & Kerberos, cloud security, digital forensics, detection engineering | Coming soon (on the map) |
+| **Level 3 Advanced** | PKI & certificates, applied cryptography, identity/AD & Kerberos, cloud security, digital forensics, detection engineering (6 skills) plus 4 Level 3 SIEM cases and the *Major incident* capstone | Live |
 
 To add a tier or track later: add its skills to `content/skills.js` with a `track`, list the track in the tier's `tracks`, and flip `status` to `available`. Rank gates, the dashboard tier bars and the career view all read from this data, so no code changes are needed.
 
@@ -233,6 +233,36 @@ Then you write the **shift handover**, rubric-scored out of 100 (pass at 55) wit
 
 The placement check still covers only the 13 Level 1 skills. Level 2 is learned through its lessons.
 
+## Level 3: Advanced (`content/l3/`)
+
+Level 3 adds specialist depth, built to the same standard. Each skill has a lesson (4–5 sections), a worked example, a partly-solved example, 12–13 questions (multiple choice, select-all, typed recall, and artifacts such as `openssl x509` output, Zeek ssl/x509 logs, Kerberos events, CloudTrail JSON, Prefetch and $MFT output and Sigma rules), and 3–4 misconceptions with targeted fixes and follow-up questions. Everything is fictional (RFC 5737 / private IPs, `.example` domains, AWS's documentation placeholders such as account 111122223333).
+
+| Skill | Builds on | What it covers |
+| --- | --- | --- |
+| PKI & certificates (`l3-pki`) | HTTP & HTTPS | X.509 fields (issuer, subject, SAN, Basic Constraints, EKU), chains of trust, what validation proves (and that a padlock is not "safe"), OCSP/CRL, Certificate Transparency, TLS 1.3 hiding the certificate, JA3/JA4, self-signed certificates on C2, the CA/Browser Forum 200-day limit (SC-081v3, from March 2026) |
+| Applied cryptography (`l3-crypto`) | PKI | Encoding vs hashing vs encryption, symmetric vs asymmetric and hybrid encryption, forward secrecy, password storage (salt, Argon2id/scrypt/bcrypt), deprecated algorithms (MD5, SHA-1, RC4, 3DES), ransomware crypto and realistic recovery |
+| Identity, AD & Kerberos (`l3-identity`) | Host logs, Users & permissions, ATT&CK | 4768/4769/4624/4672/4662 in the logs, encryption types (0x17 RC4, 0x12 AES256), Kerberoasting, AS-REP roasting (pre-auth type 0), pass-the-hash, golden vs silver tickets, DCSync and the double krbtgt reset |
+| Cloud security (`l3-cloud`) | Identity | Shared responsibility, IAM and access keys (AKIA vs ASIA), reading CloudTrail (eventName, userIdentity, sourceIPAddress, errorCode), the stolen-key playbook, public buckets and Block Public Access, instance metadata / IMDSv2 |
+| Digital forensics (`l3-forensics`) | Incident response | RFC 3227 order of volatility, why not to power off, imaging with write blockers and SHA-256, chain of custody, Prefetch / Amcache / ShimCache, $MFT timestomping ($SI vs $FN), Volatility 3, UTC super-timelines |
+| Detection engineering (`l3-detection`) | SIEM, Threat hunting | Sigma rule anatomy (logsource, detection, condition), detection-as-code and testing, tuning for precision with narrow exclusions, honest ATT&CK coverage, the Pyramid of Pain |
+
+**Level 3 SIEM cases** (`content/l3/siem-cases.js`) open once you have learned the Level 3 skill they rely on, and add a *Cloud audit logs* source:
+
+- **The scanner account that learned to replicate** (hard, identity): AS-REP roasting → cracked legacy account → DCSync → golden ticket. True positive.
+- **A certificate called localhost** (medium, PKI): a fake CV runs an implant that beacons over TLS with a default self-signed certificate; the printer's self-signed certificate is the noise. True positive.
+- **The rule that cried ransomware** (easy, detection): a new shadow-copy rule matches `vssadmin list shadows`. False positive: fix the rule logic, not the host.
+- **Same key, new network** (hard, **ambiguous**, cloud): a CI access key is used from a new hosting IP in the middle of a runner migration, with the runner logs missing.
+
+**Capstone: Major incident** (`content/l3/major-incident.js`) gates SOC Manager. You are the technical lead on a Saturday-morning major incident:
+
+1. **How did they get the domain?** Kerberoasting → cracked svc_backup → DCSync → golden ticket.
+2. **The cloud side:** the backup server's long-term AWS key is used to try to destroy the off-site backups; Object Lock and an SCP hold.
+3. **Ransomware staging:** shadow copies deleted, hybrid encryption (ChaCha20 + RSA-4096), a CN=localhost C2 certificate; contain without losing memory.
+4. **Evidence and patient zero:** order of volatility, chain of custody, Prefetch, Amcache and a timestomped DLL.
+5. **Eradicate, recover, detect:** the double krbtgt reset in one coordinated window and the detections that would have caught it earlier.
+
+Then you write one report for two audiences, rubric-scored out of 100 (pass at 60) with a model answer: a plain-language **executive summary** 15 and a **technical report** 20, severity 5, phase 5, compromised systems 10, identities 10, timeline 10, IOCs 5, evidence to preserve 10, response plan 10. Stages pay 75 XP each and the report pays 800 (both × score, improvement only). Finishing it earns the **Incident Commander** badge.
+
 ## How it adapts to you
 
 - **Mastery tracking.** For each skill the tutor keeps an estimate of how likely it is that you know it (a method called *Bayesian Knowledge Tracing*). Every answer updates it. A correct answer on a hard question counts for more than on an easy one; typed answers count for more than multiple choice because they're hard to guess. A skill is **mastered** at 85% after at least 4 answers.
@@ -311,7 +341,7 @@ The tests verify the adaptive engine (mastery updates, review scheduling, prereq
 - scenario requirements are valid;
 - public IPs use documentation ranges.
 
-The gamification tests (`tests/game.test.js`) use a fake clock to check the XP rules, level and rank thresholds, every badge condition, streaks and grace days (including DST changes), titles and themes, and the v1 → v2 and v2 → v3 migrations. `tests/career.test.js` covers the 16-rank ladder: gate types, tier progress, next-rank requirements, the level curve, the XP budget and the v2 → v3 ladder migration. `tests/siem.test.js` covers the SIEM query, filter and pivot helpers, the case scorer (verdict credit, evidence, noise penalty, efficiency, write-up), unlocks and case data integrity. `tests/ambiguous.test.js` covers the ambiguous cases: content integrity, defensible verdicts, gap and next-step scoring, calibrated confidence (high = 0), a lucky guess failing, XP and the Grey Area badge, and rank-gate counting. `tests/capstone.test.js` covers the stage unlocks, question and stage scoring, the escalation rubric, the model answer and progress. `tests/level2.test.js` covers Level 2: the skill IDs the gates use, prerequisites rooted in Level 1, question counts and formats, lessons and misconceptions, technical anchors (NIST phases, ATT&CK IDs, SPF/DKIM/DMARC, static vs dynamic analysis, hypothesis-driven hunting), the Level 2 cases and their unlocks, and the Night-shift lead capstone (rubric, model answer, XP rates, Senior Analyst I gate).
+The gamification tests (`tests/game.test.js`) use a fake clock to check the XP rules, level and rank thresholds, every badge condition, streaks and grace days (including DST changes), titles and themes, and the v1 → v2 and v2 → v3 migrations. `tests/career.test.js` covers the 16-rank ladder: gate types, tier progress, next-rank requirements, the level curve, the XP budget and the v2 → v3 ladder migration. `tests/siem.test.js` covers the SIEM query, filter and pivot helpers, the case scorer (verdict credit, evidence, noise penalty, efficiency, write-up), unlocks and case data integrity. `tests/ambiguous.test.js` covers the ambiguous cases: content integrity, defensible verdicts, gap and next-step scoring, calibrated confidence (high = 0), a lucky guess failing, XP and the Grey Area badge, and rank-gate counting. `tests/capstone.test.js` covers the stage unlocks, question and stage scoring, the escalation rubric, the model answer and progress. `tests/level2.test.js` covers Level 2: the skill IDs the gates use, prerequisites rooted in Level 1, question counts and formats, lessons and misconceptions, technical anchors (NIST phases, ATT&CK IDs, SPF/DKIM/DMARC, static vs dynamic analysis, hypothesis-driven hunting), the Level 2 cases and their unlocks, and the Night-shift lead capstone (rubric, model answer, XP rates, Senior Analyst I gate). `tests/level3.test.js` does the same for Level 3 (X.509 and the 200-day rule, Kerberos event IDs and encryption types, CloudTrail fields, RFC 3227, Sigma), checks the Level 3 cases, the Major incident report (executive and technical write-ups, model answer = 100, XP, Incident Commander, SOC Manager gate), each Level 3 rank gate, and the XP budget: content alone reaches Incident Responder, and SOC Manager needs about three months of reviews on top.
 
 ## Gamification
 
@@ -337,8 +367,8 @@ Training should feel like progressing through a SOC career, but the rewards are 
 | Harder question in a mastered skill | ×0.5 |
 | SIEM case (score/100 × rate): easy / medium / hard | 120 / 160 / 220 |
 | SIEM case with the wrong verdict | ×0.25 |
-| Capstone stage (best score/100 × rate): First shift / Night-shift lead | 40 / 50 |
-| Escalation / handover report (score/100 × rate): First shift / Night-shift lead | 300 / 500 |
+| Capstone stage (best score/100 × rate): First shift / Night-shift lead / Major incident | 40 / 50 / 75 |
+| Escalation / handover / incident report (score/100 × rate): First shift / Night-shift lead / Major incident | 300 / 500 / 800 |
 | Same skill, same day: answers 16–30 / 31+ | ×0.5 / ×0.25 |
 
 XP is never taken away. Wrong answers still earn a little for the effort. Re-answering easy questions in a skill you've already mastered earns nothing, and grinding one skill on the same day has diminishing returns. Investigations and capstone stages pay only for **improvement**: replaying a case pays the difference between your new best score and what you were already paid, so clicking through a case twice earns nothing extra.
@@ -353,15 +383,15 @@ XP is never taken away. Wrong answers still earn a little for the effort. Re-ans
 
 | Source | Max XP |
 | --- | --- |
-| 229 questions answered right (128 Level 1 + 101 Level 2, incl. typed and "Sure" bonuses) | 4,915 |
-| 20 skills mastered (13 + 7) | 2,000 |
-| Lessons and worked/faded examples | 900 |
-| 68 misconceptions resolved | 1,360 |
-| 12 SIEM cases at 100% (5 standard + 3 ambiguous in Level 1, 4 in Level 2) | 2,020 |
-| Capstones: First shift (460) + Night-shift lead (4 × 50 + 500) at 100% | 1,160 |
-| **Total** | **12,355 XP → level 24 of 60, Senior Analyst I (rank 10 of 16, 60% of the way up the ladder)** |
+| 304 questions answered right (128 Level 1 + 101 Level 2 + 75 Level 3, incl. typed and "Sure" bonuses) | 6,575 |
+| 26 skills mastered (13 + 7 + 6) | 2,600 |
+| Lessons and worked/faded examples | 1,170 |
+| 89 misconceptions resolved | 1,780 |
+| 16 SIEM cases at 100% (8 in Level 1, 4 in Level 2, 4 in Level 3) | 2,740 |
+| Capstones: First shift (460) + Night-shift lead (700) + Major incident (5 × 75 + 800) at 100% | 2,335 |
+| **Total** | **17,200 XP → level 28 of 60, Incident Responder (rank 12 of 16)** |
 
-Level 1 on its own is still worth about 7,180 XP (Tier 1 Analyst III). A month of daily reviews adds about 3,000 XP (15,355 total, level 27). That still leaves you at Senior Analyst I, because Senior Analyst II needs Level 3 content. Root-gap bonuses and streaks are not counted.
+Levels 1 and 2 alone are worth 12,355 XP (Senior Analyst I, rank 10); Level 1 alone about 7,180 XP (Tier 1 Analyst III). Finishing every piece of Level 3 content takes you past Senior Analyst II to Incident Responder. The top of the ladder also needs **sustained review and practice**: each month of daily reviews adds about 3,000 XP, so one month on top of all content reaches Threat Hunter (20,200), two months SOC Lead (23,200) and three months SOC Manager (26,200, level 34). Root-gap bonuses and streaks are not counted.
 
 **Ranks: the SOC career ladder.** There are 16 ranks spread over the three curriculum tiers, all defined in `content/career.js` → `RANKS`. Each rank needs its XP **and** its gates. The gates are data: `mastered` (N skills in a tier), `tier` (every skill in a tier), `skills` (specific skills), `cases` (N SIEM cases solved), `scenario` (a capstone completed) and `all-tiers`. New tracks slot in without code changes.
 
@@ -377,18 +407,18 @@ Level 1 on its own is still worth about 7,180 XP (Tier 1 Analyst III). A month o
 | 8 | Tier 2 Analyst II | 8,500 | 4 Level 2 skills mastered |
 | 9 | Tier 2 Analyst III | 10,000 | All Level 2 skills |
 | 10 | Senior Analyst I | 11,500 | All Level 2 + *Night-shift lead* capstone |
-| 11 | Senior Analyst II | 31,000 | 2 Level 3 skills mastered |
-| 12 | Incident Responder | 39,000 | Incident response + Digital forensics |
-| 13 | Threat Hunter | 48,000 | Threat hunting + Identity/AD & Kerberos |
-| 14 | Detection Engineer | 58,000 | SIEM queries + Detection engineering |
-| 15 | SOC Lead | 70,000 | All Level 3 skills |
-| 16 | SOC Manager | 85,000 | Every tier + *Major incident* capstone (planned) |
+| 11 | Senior Analyst II | 16,000 | 2 Level 3 skills mastered |
+| 12 | Incident Responder | 17,000 | Incident response + Digital forensics |
+| 13 | Threat Hunter | 18,500 | Threat hunting + Identity/AD & Kerberos |
+| 14 | Detection Engineer | 20,500 | SIEM queries + Detection engineering |
+| 15 | SOC Lead | 23,000 | All Level 3 skills |
+| 16 | SOC Manager | 26,000 | Every tier + *Major incident* capstone |
 
 The dashboard **Operator** panel shows your rank insignia (chevrons for the sub-step; bars and stars for the band), a ladder strip with the three tiers, and a **Next rank** checklist with a progress bar for each requirement. **Career ladder** opens the full view: where you are, the curriculum tiers with their tracks, and every rank with its requirements and what it unlocks.
 
 Your current title, level and XP bar sit in the status bar and the **Operator** panel on the dashboard.
 
-**Badges** (32, including 4 secret ones that show as "???" until earned). The **Profile & badges** screen shows earned badges, locked silhouettes and your progress toward each one.
+**Badges** (35, including 4 secret ones that show as "???" until earned). The **Profile & badges** screen shows earned badges, locked silhouettes and your progress toward each one.
 
 | Badge | How to earn it | Unlocks title |
 | --- | --- | --- |
@@ -404,6 +434,7 @@ Your current title, level and XP bar sit in the status bar and the **Operator** 
 | Host Hardened | Master every Host basics skill. | Host Hardener |
 | Packet Whisperer | Master every Network basics skill. | Packet Whisperer |
 | Foundation Laid | Master all Level 1 skills. |  |
+| SOC Operator | Master all Level 2 SOC Operations skills. | SOC Operator |
 | Gap Closer | Fix a root gap the tutor identified. | Gap Closer |
 | Second Look | Clear 10 missed questions from your review list. |  |
 | Daily Duty | Finish all your due reviews on 5 different days. |  |
@@ -415,6 +446,8 @@ Your current title, level and XP bar sit in the status bar and the **Operator** 
 | Grey Area | Solve an ambiguous case with 80+ points, calibrated confidence and no harmful next steps. | Grey Area Analyst |
 | SIEM Sleuth | Solve every SIEM investigation case. | SIEM Sleuth |
 | Shift Complete | Finish the First shift capstone with an escalation report. | Night Watch |
+| Shift Lead | Finish the Night-shift lead capstone with a passing handover. | Shift Lead |
+| Incident Commander | Finish the Major incident capstone with a passing report. | Incident Commander |
 | Clean Handoff | Score 85% or more on an escalation report. |  |
 | On Watch I | Study 3 days in a row. |  |
 | On Watch II | Study 7 days in a row. |  |
@@ -480,12 +513,13 @@ content/misconceptions.js  misconception catalog (targeted fixes, lesson links)
 content/scenarios.js    scenarios: mixed practice, SIEM mode entry, First shift capstone (stages, escalation rubric, model answer)
 content/l2/             Level 2 SOC Operations: skills.js (track + skills), one file per skill (questions, lesson,
                         misconceptions), siem-cases.js (Level 2 cases), night-shift.js (capstone), index.js (wiring)
+content/l3/             Level 3 Advanced: same layout; siem-cases.js (Level 3 cases), major-incident.js (capstone)
 tests/                  automated tests (node --test)
 ```
 
 ## Roadmap
 
-- **Level 3 Advanced:** PKI & certificates, cryptography, identity/AD & Kerberos, cloud security, digital forensics, detection engineering, plus a *Major incident* capstone.
+- **Level 4:** deeper specialisations (malware reverse engineering, OT/ICS, red-team collaboration) once Level 3 has settled.
 - **More SIEM cases** for each new track (the case format is pure data).
 - **More question types:** "put the steps in order", clickable log lines, longer multi-step investigations.
 - **Optional AI explanations:** a "explain it differently" button using an AI model (would need an API key and a small backend, so it stays optional).

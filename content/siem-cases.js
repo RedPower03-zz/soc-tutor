@@ -36,6 +36,7 @@ export const SIEM_SOURCES = {
   ops: { label: 'Ops & SIEM health', code: 'OPS' },
   email: { label: 'Mail gateway', code: 'MAIL' },
   sandbox: { label: 'Malware sandbox', code: 'SBX' },
+  cloud: { label: 'Cloud audit logs', code: 'CLD' },
 };
 
 export const VERDICTS = {
