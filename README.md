@@ -215,6 +215,17 @@ The handoff is accepted at 50 or more. After you submit, the rubric feedback sho
 
 Progress is stored in your browser's local storage. **Reset progress** (bottom of the dashboard) wipes it. Clearing browser data or switching browsers/devices also starts you fresh.
 
+### Backup and moving to another device
+
+Open **Profile → Backup & move device** (`js/backup.js`, `js/backup-ui.js`):
+
+- **Download backup file**: a `.json` file with your whole save (`{app, format, exportedAt, stateVersion, state}`). On phones that support it, **Share / save to Files** is offered too.
+- **Backup code**: the same save compressed (deflate) and base64url-encoded as one copyable string, `SOCT1.<d|u>.<crc32>.<data>`. The prefix carries the code version and the CRC32 checksum catches a code that was cut short or mistyped. Use this on iPhone if the file download doesn't start: copy it into a note or message it to yourself.
+- **Restore** from a file or a pasted code. The backup is validated, older saves are upgraded with the normal save migration, and you see a preview (rank, XP, skills mastered, badges, backup date) and must confirm before your current progress is replaced. The replaced progress is kept for one **Undo import**.
+- The screen shows when you last backed up. If it has been 7+ days (or you never have) and you've earned at least 150 XP since, a gentle reminder appears on the home screen (**Later** snoozes it for 3 days).
+
+This is the manual way to move progress. True automatic sync between devices would need a backend server or a login, which this app deliberately doesn't have.
+
 ## Adding or editing questions
 
 Questions live in `content/questions/host.js` and `content/questions/network.js`. Each one is a block like this:
@@ -423,6 +434,8 @@ js/capstone.js          capstone stage unlocks, stage scoring, escalation rubric
 js/ops-ui.js            career ladder, SIEM and capstone screens
 js/insignia.js          rank insignia (SVG)
 js/storage.js           saving progress in the browser
+js/backup.js            backup file/code export and import (validation, checksum, migration, reminder; unit-tested)
+js/backup-ui.js         Backup & move device screen and home reminder
 js/icons.js             inline SVG icon set
 content/skills.js       skill map, tracks and prerequisites (incl. planned Level 2/3 tracks)
 content/career.js       curriculum tiers and the rank ladder (XP + gates)

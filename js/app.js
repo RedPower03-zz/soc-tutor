@@ -7,6 +7,7 @@ import { loadState, saveState, clearState, newState } from './storage.js';
 import { icon } from './icons.js';
 import { rankInsignia } from './insignia.js';
 import * as OPS from './ops-ui.js';
+import * as BACKUP from './backup-ui.js';
 
 const app = document.getElementById('app');
 const idx = E.indexContent(CONTENT);
@@ -300,6 +301,13 @@ function renderProfile() {
     </header>
     ${operatorPanel({ withButton: false })}
     ${panel({
+      title: 'Backup & move device',
+      icon: 'shield',
+      meta: esc(BACKUP.statusLine()),
+      cls: 'backup-panel',
+      body: `<p class="small muted">Progress is saved only in this browser. Download a backup file or copy a backup code to keep it safe or continue on another device.</p><button class="btn secondary" data-action="backup">${icon('shield')}Backup &amp; restore</button>`,
+    })}
+    ${panel({
       title: 'Badges',
       icon: 'award',
       meta: `${earnedList.length}/${badges.length} earned`,
@@ -498,6 +506,7 @@ function renderHome() {
     ${statusBar()}
     ${welcome}
     ${OPS.ladderNoticeBanner()}
+    ${firstVisit ? '' : BACKUP.reminderBanner()}
     ${focusBanner}
     ${firstVisit ? '' : operatorPanel()}
     ${hero}
@@ -1557,7 +1566,7 @@ app.addEventListener('click', (e) => {
       }
       return undefined;
     default:
-      OPS.handleClick(action, el);
+      if (!BACKUP.handleClick(action, el)) OPS.handleClick(action, el);
       return undefined;
   }
 });
@@ -1581,6 +1590,31 @@ OPS.initOps({
   queueAchievements,
   refreshStatusXp,
   skillName,
+  setScreen: () => {
+    session = null;
+    current = null;
+    lessonView = null;
+  },
+});
+
+BACKUP.initBackup({
+  getState: () => state,
+  setState: (next) => {
+    state = next;
+    E.applyDecay(state, CONTENT, now());
+    applyTheme();
+    save();
+    refreshStatusXp();
+  },
+  rankTitle: () => G.RANKS[G.rankIndex(state.game.rankId)].title,
+  save,
+  now,
+  render,
+  statusBar,
+  panel,
+  chip,
+  esc,
+  renderHome,
   setScreen: () => {
     session = null;
     current = null;
