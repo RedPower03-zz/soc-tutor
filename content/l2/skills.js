@@ -7,7 +7,7 @@
 export const L2_TRACK = {
   id: 'soc',
   name: 'SOC operations (Level 2)',
-  description: 'Real analyst workflows built on the basics: triage, SIEM, phishing, malware, ATT&CK, incident response, hunting and vulnerability management.',
+  description: 'Real analyst workflows built on the basics: triage, SIEM, phishing, malware, ATT&CK, incident response, hunting, vulnerability management, web attacks and network security monitoring.',
   comingSoon: false,
 };
 
@@ -83,5 +83,23 @@ export const L2_SKILLS = [
     order: 27,
     prereqs: ['net-ports', 'l2-alert-triage'],
     summary: 'Scanner output, CVE/CWE, CVSS v3.1/v4 vectors, EPSS and KEV, risk-based priority, exceptions, SLAs and verified fixes.',
+  },
+  {
+    id: 'l2-web',
+    name: 'Web application attacks',
+    track: 'soc',
+    level: 2,
+    order: 28,
+    prereqs: ['net-http', 'l2-alert-triage'],
+    summary: 'SQLi, XSS, traversal, command injection, SSRF and web shells in access and WAF logs; decoding; status codes; OWASP Top 10.',
+  },
+  {
+    id: 'l2-ids',
+    name: 'IDS/IPS & network monitoring',
+    track: 'soc',
+    level: 2,
+    order: 29,
+    prereqs: ['net-fw-logs', 'l2-alert-triage'],
+    summary: 'Snort/Suricata rules, eve.json alerts, Zeek conn/dns/http/ssl/notice logs, tuning noisy signatures, IDS vs IPS placement.',
   },
 ];

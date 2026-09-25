@@ -8,7 +8,7 @@ import * as E from '../js/engine.js';
 import { CONTENT } from '../content/index.js';
 
 const idx = E.indexContent(CONTENT);
-const SPECIALIST = ['l2-vuln'];
+const SPECIALIST = ['l2-vuln', 'l2-web', 'l2-ids'];
 const HIGHER = new Set(['apply', 'analyze', 'evaluate', 'create']);
 const BLOOM = new Set(['remember', 'understand', ...HIGHER]);
 const itemsOf = (id) => CONTENT.items.filter((i) => i.skill === id);
@@ -48,7 +48,8 @@ test('specialist Bloom mix: every item labelled, at least 40% apply/analyze/eval
 test('specialist MC options: the right answer is not a length giveaway (longest in at most 35%)', () => {
   for (const id of SPECIALIST) {
     const mc = itemsOf(id).filter((i) => i.type === 'mc');
-    const longest = mc.filter((i) => i.answer.length >= Math.max(...i.choices.filter((c) => c !== i.answer).map((c) => c.length)));
+    // uniquely longest, as in answer-balance.test.js (a tie gives no cue)
+    const longest = mc.filter((i) => i.answer.length > Math.max(...i.choices.filter((c) => c !== i.answer).map((c) => c.length)));
     const pct = longest.length / mc.length;
     assert.ok(pct <= 0.35, `${id}: correct answer longest in ${Math.round(pct * 100)}% (${longest.map((i) => i.id).join(', ')})`);
   }
@@ -73,4 +74,18 @@ test('vulnerability management anchors: CVSS vectors and bands, EPSS, KEV, crede
   const vm04 = CONTENT.items.find((i) => i.id === 'vm-04');
   assert.deepEqual(vm04.accept, ['9.8']);
   assert.match(CONTENT.items.find((i) => i.id === 'vm-17').explanation, /9\.3[\s\S]*8\.1/);
+});
+
+test('web attack anchors: every attack class, decoding, status codes, both OWASP editions', () => {
+  const t = text('l2-web');
+  for (const k of ['union select', 'sleep(', '<script>', 'onerror', '%2e%2e%2f', '/etc/passwd', 'rfi', 'lfi', '169.254.169.254', 'ssrf', 'web shell', 't1505.003', 'credential stuffing', 'spray', '404', '403', '401', '302', 'core rule set', 'detection-only', 'parameterised', 'idor', 'a03:2021', 'a10:2021', 'a05 injection', 'software supply chain failures', 'mishandling of exceptional conditions'])
+    assert.ok(t.includes(k), `web: ${k}`);
+});
+
+test('IDS/NSM anchors: rule anatomy, eve.json, Zeek fields and states, tuning, placement', () => {
+  const t = text('l2-ids');
+  for (const k of ['$home_net', 'flow:established,to_server', 'sid', 'rev', 'pcre', 'http.uri', 'threshold', 'detection_filter', 'suppress', 'eve.json', 'signature_id', 'alert.action', 'allowed', 'verdict', 'uid', 'conn_state', 's0', 'rej', 'sf', 'id.orig_h', 'server_name', 'qtype_name', 'notice.log', 'ssh::password_guessing', 'tap', 'span', 'fail open', 'ja3'])
+    assert.ok(t.includes(k), `ids: ${k}`);
+  // Suricata severity: 1 is the most urgent
+  assert.equal(CONTENT.items.find((i) => i.id === 'ids-07').answer, '1');
 });
