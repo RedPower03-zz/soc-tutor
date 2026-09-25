@@ -1,0 +1,221 @@
+// Skill map for SOC Tutor.
+//
+// Each skill has:
+//   id        unique id (used by questions via their `skill` field)
+//   name      what the student sees
+//   track     which track it belongs to (see TRACKS)
+//   level     1 = available now, 2+ = roadmap
+//   order     suggested learning order (lower comes first)
+//   prereqs   ids of skills that should be mastered first
+//   summary   one-line description
+//   comingSoon  true for roadmap skills that have no questions yet
+
+export const TRACKS = [
+  {
+    id: 'host',
+    name: 'Host basics',
+    level: 1,
+    icon: '🖥️',
+    description: 'How computers run programs, who is allowed to do what, and where the evidence lives.',
+  },
+  {
+    id: 'network',
+    name: 'Network basics',
+    level: 1,
+    icon: '🌐',
+    description: 'How machines talk to each other, and how to read the traces they leave.',
+  },
+  {
+    id: 'soc',
+    name: 'SOC analyst skills (Level 2+)',
+    level: 2,
+    icon: '🛡️',
+    description: 'Real analyst workflows built on top of the basics. Coming soon.',
+    comingSoon: true,
+  },
+];
+
+export const SKILLS = [
+  // ---------------- Host basics ----------------
+  {
+    id: 'host-processes',
+    name: 'OS fundamentals & processes',
+    track: 'host',
+    level: 1,
+    order: 1,
+    prereqs: [],
+    summary: 'Programs vs processes, PIDs, parent/child trees and spotting suspicious processes.',
+  },
+  {
+    id: 'host-users',
+    name: 'Users, groups & permissions',
+    track: 'host',
+    level: 1,
+    order: 3,
+    prereqs: [],
+    summary: 'Linux rwx and root, Windows admin groups and UAC, least privilege.',
+  },
+  {
+    id: 'host-filesystem',
+    name: 'File system & common paths',
+    track: 'host',
+    level: 1,
+    order: 5,
+    prereqs: [],
+    summary: 'Where system files, user files, temp folders and secrets live on Windows and Linux.',
+  },
+  {
+    id: 'host-persistence',
+    name: 'Services & persistence basics',
+    track: 'host',
+    level: 1,
+    order: 8,
+    prereqs: ['host-processes', 'host-filesystem'],
+    summary: 'Services, scheduled tasks, cron, Run keys and other ways attackers survive a reboot.',
+  },
+  {
+    id: 'host-logs',
+    name: 'Host logs (Windows & Linux)',
+    track: 'host',
+    level: 1,
+    order: 10,
+    prereqs: ['host-users', 'host-processes'],
+    summary: 'Windows Security event IDs (4624, 4625, 4688, 4720, 4672...) and Linux auth.log/syslog.',
+  },
+
+  // ---------------- Network basics ----------------
+  {
+    id: 'net-osi',
+    name: 'OSI & TCP/IP layers',
+    track: 'network',
+    level: 1,
+    order: 2,
+    prereqs: [],
+    summary: 'The layer models, what lives at each layer, and encapsulation.',
+  },
+  {
+    id: 'net-ip',
+    name: 'IP addressing & private ranges',
+    track: 'network',
+    level: 1,
+    order: 4,
+    prereqs: ['net-osi'],
+    summary: 'IPv4 structure, RFC 1918 private ranges, loopback, APIPA and NAT.',
+  },
+  {
+    id: 'net-subnet',
+    name: 'Subnetting & CIDR',
+    track: 'network',
+    level: 1,
+    order: 7,
+    prereqs: ['net-ip'],
+    summary: 'CIDR notation, subnet masks, host counts, network and broadcast addresses.',
+  },
+  {
+    id: 'net-ports',
+    name: 'Ports & common protocols',
+    track: 'network',
+    level: 1,
+    order: 6,
+    prereqs: ['net-osi'],
+    summary: 'Well-known ports (22, 53, 80, 443, 445, 3389...) and ephemeral ports.',
+  },
+  {
+    id: 'net-tcp-udp',
+    name: 'TCP handshake, flags & UDP',
+    track: 'network',
+    level: 1,
+    order: 9,
+    prereqs: ['net-ports'],
+    summary: 'SYN / SYN-ACK / ACK, RST and FIN, scans and floods, and how UDP differs.',
+  },
+  {
+    id: 'net-dns',
+    name: 'DNS',
+    track: 'network',
+    level: 1,
+    order: 11,
+    prereqs: ['net-ports'],
+    summary: 'Name resolution, record types, and DNS abuse like tunneling and look-alike domains.',
+  },
+  {
+    id: 'net-http',
+    name: 'HTTP & HTTPS basics',
+    track: 'network',
+    level: 1,
+    order: 12,
+    prereqs: ['net-dns', 'net-tcp-udp'],
+    summary: 'Methods, status codes, headers, TLS, and reading web server logs.',
+  },
+  {
+    id: 'net-fw-logs',
+    name: 'Reading firewall & connection logs',
+    track: 'network',
+    level: 1,
+    order: 13,
+    prereqs: ['net-subnet', 'net-tcp-udp'],
+    summary: 'Allow/deny lines, scans, beaconing and exfiltration patterns.',
+  },
+
+  // ---------------- Level 2+ roadmap (coming soon) ----------------
+  {
+    id: 'l2-alert-triage',
+    name: 'Alert triage',
+    track: 'soc',
+    level: 2,
+    order: 20,
+    prereqs: ['host-logs', 'net-fw-logs'],
+    summary: 'True vs false positives, severity, and what to check first.',
+    comingSoon: true,
+  },
+  {
+    id: 'l2-siem',
+    name: 'SIEM queries',
+    track: 'soc',
+    level: 2,
+    order: 21,
+    prereqs: ['host-logs', 'net-fw-logs'],
+    summary: 'Searching and correlating logs (Splunk SPL, KQL-style queries).',
+    comingSoon: true,
+  },
+  {
+    id: 'l2-phishing',
+    name: 'Phishing analysis',
+    track: 'soc',
+    level: 2,
+    order: 22,
+    prereqs: ['net-dns', 'net-http'],
+    summary: 'Email headers, SPF/DKIM/DMARC, links and attachments.',
+    comingSoon: true,
+  },
+  {
+    id: 'l2-malware',
+    name: 'Malware basics',
+    track: 'soc',
+    level: 2,
+    order: 23,
+    prereqs: ['host-persistence', 'host-processes'],
+    summary: 'Malware families, indicators of compromise and safe first-look analysis.',
+    comingSoon: true,
+  },
+  {
+    id: 'l2-ir',
+    name: 'Incident response',
+    track: 'soc',
+    level: 3,
+    order: 24,
+    prereqs: ['l2-alert-triage'],
+    summary: 'Containment, eradication, recovery and writing it up.',
+    comingSoon: true,
+  },
+  {
+    id: 'l2-hunting',
+    name: 'Threat hunting',
+    track: 'soc',
+    level: 3,
+    order: 25,
+    prereqs: ['l2-siem', 'l2-malware'],
+    summary: 'Hypothesis-driven searching for attackers that alerts missed.',
+    comingSoon: true,
+  },
+];
