@@ -114,7 +114,7 @@ The dashboard **Operations** panel holds three activities: **Mixed practice**, *
 
 ### SIEM investigation mode (`content/siem-cases.js`, `js/siem.js`)
 
-Each case starts with an alert. You search a simulated log table that mixes five sources: **WIN** (Windows Security events), **PROC** (process creation), **FW** (firewall), **DNS** and **PRXY** (web proxy). Tools:
+Each case starts with an alert. You search a simulated log table that mixes up to seven sources: **WIN** (Windows Security events), **PROC** (process creation), **FW** (firewall and VPN), **DNS**, **PRXY** (web proxy), **IDP** (cloud sign-in logs) and **OPS** (ops and SIEM health: agent status, connector gaps, retention, on-call pages, change calendar). Tools:
 - A free-text search box, source chips with row counts, and host / user / event type / time-window filters. On a phone these sit in a sticky bar; the time windows are built from the case's own timestamps.
 - Tapping a row expands it and offers **pivots**, such as *this host*, *this user*, *this IP* or *this domain*, so you can jump from a firewall line to the DNS lookup and then to the process that made it.
 - **Pin as evidence** adds the row to a tray. The tray shows the pin count and jumps to the verdict panel.
@@ -138,6 +138,44 @@ A case is **solved** when the verdict is right and the score is 60 or more. The 
 
 "Learned" means the skill is mastered, or its lesson is done and you have answered at least 4 of its questions with a reasonable mastery estimate (the same rule mixed practice uses). Locked cases show which skills they need.
 
+### Ambiguous cases (`content/siem-ambiguous.js`)
+
+Real alerts often can't be proven either way. Logs have gaps, an agent was down, or the evidence fits two stories. Three cases, marked **Ambiguous** in the case list, train you to make the call anyway and to be honest about how sure you are:
+
+| Case | Difficulty | Preferred call (also defensible) | What's uncertain | Unlocks when you've learned |
+| --- | --- | --- | --- | --- |
+| A sign-in from Lisbon | Medium | True positive, verify fast (benign true positive) | New country and unmanaged device, but MFA approved first time. No travel data, and mailbox audit is paused. | Users & permissions, Host logs, IP addressing |
+| Admin tool, no ticket | Medium | Benign true positive (true positive) | PsExec and "whoami / net localgroup" by an IT admin account on a Saturday. There's an on-call page, but no change record, and the admin laptop's EDR was blind. | OS & processes, Users & permissions, Host logs, Services & persistence |
+| The missing three hours | Hard | True positive at medium confidence (benign true positive) | An unsigned tool calls a 3-day-old domain. The endpoint agent was down 08:02–11:05, when it was installed, and TLS wasn't inspected. | OS & processes, File system, DNS, HTTP & HTTPS, Firewall logs |
+
+On these cases the verdict panel adds a **confidence** choice (low / medium / high) and two checklists:
+- **What can't the data tell you?** The options mix real gaps with plausible distractors, such as a retention cutoff that doesn't matter because the domain is newer than the archive.
+- **Next steps.** The same 8 options on every case: request more logs, verify with the user or manager, check EDR, escalate with stated confidence, contain as a precaution, close, wait, and reimage. Each case rates every option as *best*, *reasonable* (neutral) or *harmful*.
+
+**Scoring, 100 points** (`scoreAmbiguous` in `js/siem.js`). It rewards reasoning, not luck:
+
+| Part | Points | How it is scored |
+| --- | --- | --- |
+| Verdict | 20 | Only has to be defensible. The preferred call gets 20; the other defensible call gets 12–15; an indefensible call (e.g. false positive when the activity really happened) gets 0 and can't pass. |
+| What's missing | 25 | (real gaps ticked − false gaps ticked) ÷ real gaps, floored at 0. Ticking everything doesn't pay. |
+| Next steps | 25 | (best steps − harmful steps) ÷ best steps, floored at 0. Reasonable steps are neutral. |
+| Confidence | 10 | Calibrated confidence earns full marks. **High is always 0** ("the data proves it" is overconfident when key facts are missing). Being more cautious than the case needs gets partial credit. |
+| Evidence | 10 | Key rows pinned. It includes the "gap" rows themselves, like the agent-down or connector-paused events. Noise costs 2 per pin, up to 6. |
+| Write-up | 10 | Keyword check: says what can't be confirmed, names the gap, proposes a next step. |
+
+A lucky preferred verdict with no reasoning scores 20 and fails. The other defensible call with good reasoning passes at 92–95. A case is solved at 60+ with a defensible verdict.
+
+The feedback screen shows:
+- the score breakdown, with an overconfidence warning when you picked high;
+- **Why either call could be defended**;
+- **What a senior analyst would do**;
+- **What would settle it**;
+- every gap and next step, with why it helps or hurts.
+
+Then **Reveal what happened next** shows the outcome from data that came in later. The screen states clearly that the grade is on your reasoning at the time, not on the outcome. One case's outcome deliberately goes the other way from the preferred call: Priya really was on holiday.
+
+Ambiguous cases pay XP at the same rate as other cases of the same difficulty, and count as SIEM cases for rank gates and the *SIEM Sleuth* badge.
+
 ### Capstone: First shift as a Tier 1 analyst (`content/scenarios.js`, `js/capstone.js`)
 
 This is one continuous incident that follows alert ALRT-3001 through four stages. Each stage unlocks once you've completed its lessons **and** the stage before it:
@@ -146,6 +184,8 @@ This is one continuous incident that follows alert ALRT-3001 through four stages
 2. **DNS** (DNS)
 3. **The process tree** (OS & processes, Services & persistence)
 4. **Logon events** (Host logs, Users & permissions)
+
+A locked stage lists the lessons it is waiting for. Tapping one opens the lesson with a **Back to the capstone** button, and closing it returns you to the capstone, where the stage is now unlocked.
 
 Each stage shows its evidence (log excerpts or a process tree) and asks 3 questions. Your best score per stage is kept, and you can review a stage at any time. After stage 4 you decide whether the incident is real and write the **escalation to Tier 2**. It has structured fields, and each one is scored against a rubric:
 
@@ -228,7 +268,7 @@ The tests verify the adaptive engine (mastery updates, review scheduling, prereq
 - scenario requirements are valid;
 - public IPs use documentation ranges.
 
-The gamification tests (`tests/game.test.js`) use a fake clock to check the XP rules, level and rank thresholds, every badge condition, streaks and grace days (including DST changes), titles and themes, and the v1 → v2 and v2 → v3 migrations. `tests/career.test.js` covers the 16-rank ladder: gate types, tier progress, next-rank requirements, the level curve, the XP budget and the v2 → v3 ladder migration. `tests/siem.test.js` covers the SIEM query, filter and pivot helpers, the case scorer (verdict credit, evidence, noise penalty, efficiency, write-up), unlocks and case data integrity. `tests/capstone.test.js` covers the stage unlocks, question and stage scoring, the escalation rubric, the model answer and progress.
+The gamification tests (`tests/game.test.js`) use a fake clock to check the XP rules, level and rank thresholds, every badge condition, streaks and grace days (including DST changes), titles and themes, and the v1 → v2 and v2 → v3 migrations. `tests/career.test.js` covers the 16-rank ladder: gate types, tier progress, next-rank requirements, the level curve, the XP budget and the v2 → v3 ladder migration. `tests/siem.test.js` covers the SIEM query, filter and pivot helpers, the case scorer (verdict credit, evidence, noise penalty, efficiency, write-up), unlocks and case data integrity. `tests/ambiguous.test.js` covers the ambiguous cases: content integrity, defensible verdicts, gap and next-step scoring, calibrated confidence (high = 0), a lucky guess failing, XP and the Grey Area badge, and rank-gate counting. `tests/capstone.test.js` covers the stage unlocks, question and stage scoring, the escalation rubric, the model answer and progress.
 
 ## Gamification
 
@@ -274,11 +314,11 @@ XP is never taken away. Wrong answers still earn a little for the effort. Re-ans
 | 13 skills mastered | 1,300 |
 | Lessons and worked/faded examples | 585 |
 | Misconceptions resolved | 820 |
-| 5 SIEM cases at 100% | 780 |
+| 8 SIEM cases at 100% (5 standard + 3 ambiguous) | 1,320 |
 | Capstone: 4 stages + escalation at 100% | 460 |
-| **Total** | **6,640 XP → level 18 of 60, Tier 1 Analyst III (rank 6 of 16, about a third of the way up the ladder)** |
+| **Total** | **7,180 XP → level 19 of 60, Tier 1 Analyst III (rank 6 of 16, about a third of the way up the ladder)** |
 
-A month of daily reviews adds about 3,000 XP, which gets you to level 22. That still leaves you at Tier 1 Analyst III, because Tier 2 needs Level 2 content. Root-gap bonuses and streaks are not counted.
+A month of daily reviews adds about 3,000 XP (10,180 total), which gets you to level 22. That still leaves you at Tier 1 Analyst III, because Tier 2 needs Level 2 content. Root-gap bonuses and streaks are not counted.
 
 **Ranks: the SOC career ladder.** There are 16 ranks spread over the three curriculum tiers, all defined in `content/career.js` → `RANKS`. Each rank needs its XP **and** its gates. The gates are data: `mastered` (N skills in a tier), `tier` (every skill in a tier), `skills` (specific skills), `cases` (N SIEM cases solved), `scenario` (a capstone completed) and `all-tiers`. New tracks slot in without code changes.
 
@@ -305,7 +345,7 @@ The dashboard **Operator** panel shows your rank insignia (chevrons for the sub-
 
 Your current title, level and XP bar sit in the status bar and the **Operator** panel on the dashboard.
 
-**Badges** (31, including 4 secret ones that show as "???" until earned). The **Profile & badges** screen shows earned badges, locked silhouettes and your progress toward each one.
+**Badges** (32, including 4 secret ones that show as "???" until earned). The **Profile & badges** screen shows earned badges, locked silhouettes and your progress toward each one.
 
 | Badge | How to earn it | Unlocks title |
 | --- | --- | --- |
@@ -329,6 +369,7 @@ Your current title, level and XP bar sit in the status bar and the **Operator** 
 | Case Closed | Solve your first SIEM investigation (right verdict, 60+ score). |  |
 | Sharp Eye | Pin every key piece of evidence in a case with no noise pins. | Sharp Eye |
 | Not Today | Correctly clear a false or benign alert without escalating it. |  |
+| Grey Area | Solve an ambiguous case with 80+ points, calibrated confidence and no harmful next steps. | Grey Area Analyst |
 | SIEM Sleuth | Solve every SIEM investigation case. | SIEM Sleuth |
 | Shift Complete | Finish the First shift capstone with an escalation report. | Night Watch |
 | Clean Handoff | Score 85% or more on an escalation report. |  |
@@ -385,7 +426,9 @@ js/storage.js           saving progress in the browser
 js/icons.js             inline SVG icon set
 content/skills.js       skill map, tracks and prerequisites (incl. planned Level 2/3 tracks)
 content/career.js       curriculum tiers and the rank ladder (XP + gates)
-content/siem-cases.js   SIEM investigation cases (alert, logs, key evidence, model reasoning)
+content/siem-cases.js   SIEM investigation cases (alert, logs, key evidence, model reasoning), sources,
+                        confidence scale and the shared next-step options
+content/siem-ambiguous.js  ambiguous cases (defensible verdicts, gaps, rated next steps, outcome)
 content/questions/*.js  the question bank (with misconception tags)
 content/lessons/*.js    one lesson per skill: concept sections, worked and faded examples
 content/misconceptions.js  misconception catalog (targeted fixes, lesson links)

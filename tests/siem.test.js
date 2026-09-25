@@ -14,7 +14,7 @@ const idx = E.indexContent(CONTENT);
 const master = (st, id) => Object.assign(st.skills[id], { p: 0.97, attempts: 6, correct: 6, unlocked: true });
 const keyPins = (c) => c.key.map((k) => k.rows[0]);
 const goodWriteup = (c) => `${c.writeup.map((w) => w.any[0]).join(', ')}: that is what the evidence shows.`;
-const perfect = (c) => ({ verdict: c.verdict, pins: keyPins(c), writeup: goodWriteup(c), queries: c.parQueries });
+const perfect = (c) => ({ verdict: c.verdict, pins: keyPins(c), writeup: goodWriteup(c), queries: c.parQueries, ...(c.ambiguous ? S.modelAmbiguous(c) : {}) });
 
 // ------------------------------------------------------------------ content
 
@@ -249,6 +249,8 @@ test('clearing a benign or false alert counts toward "Not Today"; solving every 
     G.onInvestigation(game, st, CONTENT, { caseDef: c, result, firstSolve: rec.firstSolve, now: NOW });
   }
   assert.equal(game.counters.benignCleared, cases.filter((c) => c.verdict !== 'tp').length);
+  assert.equal(game.counters.calibratedCalls, cases.filter((c) => c.ambiguous).length);
+  assert.ok(game.badges['grey-area']);
   assert.ok(game.badges['false-alarm'] && game.badges['siem-sleuth']);
   assert.equal(game.xp, cases.reduce((a, c) => a + G.XP_RULES.siemCase[c.difficulty], 0));
 });

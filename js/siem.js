@@ -8,6 +8,15 @@ export const MAX_NOISE_PENALTY = 15;
 export const MIN_WRITEUP = 20; // characters
 
 /**
+ * Ambiguous cases (the logs don't settle it): graded on reasoning under uncertainty.
+ * Most of the weight is on naming what's missing and choosing sound next steps; the verdict
+ * only has to be defensible, and confidence has to be calibrated (overconfident "high" = 0).
+ */
+export const AMBIG_WEIGHTS = { verdict: 20, gaps: 25, steps: 25, confidence: 10, evidence: 10, writeup: 10 };
+export const AMBIG_NOISE_PENALTY = 2;
+export const AMBIG_MAX_NOISE_PENALTY = 6;
+
+/**
  * Verdict partial credit (fraction of WEIGHTS.verdict): [expected][given].
  * Calling a real attack benign is the worst mistake; escalating a benign alert costs less.
  */
@@ -136,6 +145,7 @@ export function togglePin(inv, rowId) {
  * Returns { total, passed, grade, verdict, evidence, efficiency, writeup }.
  */
 export function scoreCase(c, sub) {
+  if (c.ambiguous) return scoreAmbiguous(c, sub);
   const pins = new Set(sub.pins || []);
   // verdict
   const credit = VERDICT_CREDIT[c.verdict]?.[sub.verdict] ?? 0;
@@ -174,6 +184,98 @@ export function scoreCase(c, sub) {
   const passed = verdict.correct && total >= PASS_SCORE;
   const grade = total >= 90 ? 'Outstanding' : total >= 75 ? 'Strong' : total >= PASS_SCORE ? 'Adequate' : 'Needs work';
   return { total, passed, grade, verdict, evidence, efficiency, writeup };
+}
+
+function scoreEvidence(c, pins, weight, perNoise, maxNoise) {
+  const keyRows = new Set(c.key.flatMap((k) => k.rows));
+  const related = new Set(c.related || []);
+  const found = c.key.filter((k) => k.rows.some((r) => pins.has(r)));
+  const missed = c.key.filter((k) => !k.rows.some((r) => pins.has(r)));
+  const noise = [...pins].filter((r) => !keyRows.has(r) && !related.has(r));
+  const penalty = Math.min(maxNoise, noise.length * perNoise);
+  const points = Math.max(0, Math.round((found.length / c.key.length) * weight) - penalty);
+  return { found: found.map((k) => k.id), missed: missed.map((k) => k.id), noise, penalty, points, max: weight, perfect: missed.length === 0 && noise.length === 0 };
+}
+
+function scoreWriteup(c, text, weight) {
+  const t = String(text || '').toLowerCase();
+  const long = t.trim().length >= MIN_WRITEUP;
+  const hits = long ? c.writeup.filter((w) => w.any.some((k) => t.includes(k.toLowerCase()))) : [];
+  return {
+    tooShort: !long,
+    hits: hits.map((w) => w.label),
+    misses: c.writeup.filter((w) => !hits.includes(w)).map((w) => w.label),
+    points: Math.round((hits.length / c.writeup.length) * weight),
+    max: weight,
+  };
+}
+
+/** Confidence note: how the given confidence compares with the best credit for the case. */
+export function confidenceNote(c, level) {
+  if (!level) return 'none';
+  const credit = c.confidence?.[level] ?? 0;
+  if (credit >= 1) return 'calibrated';
+  const order = ['low', 'medium', 'high'];
+  const best = order.filter((l) => (c.confidence?.[l] ?? 0) >= 1);
+  return best.length && order.indexOf(level) > order.indexOf(best.at(-1)) ? 'overconfident' : 'underconfident';
+}
+
+/**
+ * Scores an ambiguous case.
+ * sub: { verdict, confidence: 'low'|'medium'|'high', gaps: [gap ids], steps: [NEXT_STEPS ids], pins, writeup, queries }
+ */
+export function scoreAmbiguous(c, sub) {
+  const W = AMBIG_WEIGHTS;
+  const credit = c.defensible?.[sub.verdict] ?? 0;
+  const verdict = {
+    correct: sub.verdict === c.verdict,
+    preferred: sub.verdict === c.verdict,
+    defensible: credit > 0,
+    given: sub.verdict || null,
+    expected: c.verdict,
+    points: Math.round(credit * W.verdict),
+    max: W.verdict,
+  };
+
+  // What's missing: (right - wrong) / number of real gaps, floored at 0.
+  const picked = new Set(sub.gaps || []);
+  const realGaps = c.gaps.filter((g) => g.correct);
+  const gRight = realGaps.filter((g) => picked.has(g.id));
+  const gWrong = c.gaps.filter((g) => !g.correct && picked.has(g.id));
+  const gapFrac = Math.max(0, (gRight.length - gWrong.length) / realGaps.length);
+  const gaps = { right: gRight.map((g) => g.id), wrong: gWrong.map((g) => g.id), missed: realGaps.filter((g) => !picked.has(g.id)).map((g) => g.id), points: Math.round(gapFrac * W.gaps), max: W.gaps };
+
+  // Next steps: (best picked - bad picked) / number of best steps, floored at 0. 'ok' steps are neutral.
+  const chosen = new Set(sub.steps || []);
+  const ids = Object.keys(c.steps);
+  const best = ids.filter((id) => c.steps[id].rating === 'best');
+  const sBest = best.filter((id) => chosen.has(id));
+  const sBad = ids.filter((id) => c.steps[id].rating === 'bad' && chosen.has(id));
+  const sOk = ids.filter((id) => c.steps[id].rating === 'ok' && chosen.has(id));
+  const stepFrac = Math.max(0, (sBest.length - sBad.length) / best.length);
+  const steps = { best: sBest, bad: sBad, ok: sOk, missed: best.filter((id) => !chosen.has(id)), points: Math.round(stepFrac * W.steps), max: W.steps };
+
+  const level = sub.confidence || null;
+  const confidence = { given: level, note: confidenceNote(c, level), points: Math.round((c.confidence?.[level] ?? 0) * W.confidence), max: W.confidence };
+
+  const evidence = scoreEvidence(c, new Set(sub.pins || []), W.evidence, AMBIG_NOISE_PENALTY, AMBIG_MAX_NOISE_PENALTY);
+  const writeup = scoreWriteup(c, sub.writeup, W.writeup);
+
+  const total = verdict.points + gaps.points + steps.points + confidence.points + evidence.points + writeup.points;
+  const passed = verdict.defensible && total >= PASS_SCORE;
+  const grade = total >= 90 ? 'Outstanding' : total >= 75 ? 'Strong' : total >= PASS_SCORE ? 'Adequate' : 'Needs work';
+  return { ambiguous: true, total, passed, grade, verdict, gaps, steps, confidence, evidence, writeup, queries: Math.max(0, sub.queries || 0) };
+}
+
+/** The reference answer for an ambiguous case (used by tests and shown in feedback). */
+export function modelAmbiguous(c) {
+  const order = ['medium', 'low', 'high'];
+  return {
+    verdict: c.verdict,
+    confidence: order.find((l) => (c.confidence[l] ?? 0) >= 1),
+    gaps: c.gaps.filter((g) => g.correct).map((g) => g.id),
+    steps: Object.keys(c.steps).filter((id) => c.steps[id].rating === 'best'),
+  };
 }
 
 // ------------------------------------------------------------------ progress in state

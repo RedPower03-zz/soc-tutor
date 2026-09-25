@@ -1,7 +1,7 @@
 // Operations UI: career ladder view, SIEM investigations and the First shift capstone.
 // Screens render into #app through the helpers app.js passes in (see initOps).
 import { CONTENT } from '../content/index.js';
-import { SIEM_SOURCES, VERDICTS } from '../content/siem-cases.js';
+import { SIEM_SOURCES, VERDICTS, CONFIDENCE, NEXT_STEPS } from '../content/siem-cases.js';
 import * as E from './engine.js';
 import * as G from './game.js';
 import * as S from './siem.js';
@@ -237,6 +237,7 @@ let openRow = null;
 let siemResult = null;
 
 const caseById = (id) => CONTENT.siemCases.find((c) => c.id === id);
+const ambTag = () => `<span class="amb-tag" title="The logs don't settle this one">${icon('alert')}Ambiguous</span>`;
 const diffPips = (d) => `<span class="diff" title="${DIFF[d][0]}">${[1, 2, 3].map((i) => `<i class="${i <= d ? 'on' : ''}"></i>`).join('')}</span>`;
 
 export function renderSiemList() {
@@ -249,9 +250,9 @@ export function renderSiemList() {
       const open = S.caseUnlocked(c, learned);
       const status = !open ? ['Locked', 'dim'] : rec?.solved ? [`Solved · ${rec.best}`, 'ok'] : active?.caseId === c.id ? ['In progress', 'info'] : rec ? [`Best ${rec.best}`, 'warn'] : ['New', 'ready'];
       const req = c.requires.skills.map((s) => `<span class="req-skill ${learned.includes(s) ? 'ok' : ''}">${icon(learned.includes(s) ? 'check' : 'lock')}${esc(ctx.skillName(s))}</span>`).join('');
-      return `<li class="case-card ${open ? '' : 'locked'} ${rec?.solved ? 'solved' : ''}">
+      return `<li class="case-card ${open ? '' : 'locked'} ${rec?.solved ? 'solved' : ''} ${c.ambiguous ? 'amb' : ''}">
           <div class="case-top"><span class="mono case-id">${esc(c.alert.id)}</span>${diffPips(c.difficulty)}<span class="case-diff mono">${DIFF[c.difficulty][0]}</span>${ctx.chip(status)}</div>
-          <div class="case-title">${esc(c.title)}</div>
+          <div class="case-title">${esc(c.title)}${c.ambiguous ? ambTag() : ''}</div>
           <div class="case-alert small">${ctx.chip(SEV[c.alert.severity] || ['Alert', 'warn'])}<span>${esc(c.alert.name)}</span></div>
           <p class="small muted">${esc(c.summary)}</p>
           <div class="case-req small"><span class="label">Relies on</span>${req}</div>
@@ -277,7 +278,9 @@ export function renderSiemList() {
         </ol>
         <p class="src-legend small">${Object.entries(SIEM_SOURCES).map(([id, x]) => `<span class="s-${id}"><b class="src-tag">${x.code}</b> ${esc(x.label)}</span>`).join('')}</p>
         <div class="score-legend mono small"><span>Verdict <b>${S.WEIGHTS.verdict}</b></span><span>Evidence <b>${S.WEIGHTS.evidence}</b></span><span>Efficiency <b>${S.WEIGHTS.efficiency}</b></span><span>Write-up <b>${S.WEIGHTS.writeup}</b></span></div>
-        <p class="small muted">A case is solved with the right verdict and ${S.PASS_SCORE}+ points. XP scales with your score, and replays only pay for improvement.</p>`,
+        <p class="small muted">A case is solved with the right verdict and ${S.PASS_SCORE}+ points. XP scales with your score, and replays only pay for improvement.</p>
+        <div class="amb-note small"><div class="row">${ambTag()}</div><p>Some cases can't be proven either way: logs are missing, or the evidence fits two stories. You still make the call, with a <b>confidence</b> level, what's <b>missing</b> and your <b>next steps</b>. They're graded on your reasoning, not on guessing right:</p>
+          <div class="score-legend mono small"><span>Verdict <b>${S.AMBIG_WEIGHTS.verdict}</b></span><span>Missing <b>${S.AMBIG_WEIGHTS.gaps}</b></span><span>Next steps <b>${S.AMBIG_WEIGHTS.steps}</b></span><span>Confidence <b>${S.AMBIG_WEIGHTS.confidence}</b></span><span>Evidence <b>${S.AMBIG_WEIGHTS.evidence}</b></span><span>Write-up <b>${S.AMBIG_WEIGHTS.writeup}</b></span></div></div>`,
     })}
     ${ctx.panel({ title: 'Case queue', icon: 'list', meta: `${CONTENT.siemCases.filter((c) => st().siem.cases[c.id]?.solved).length}/${CONTENT.siemCases.length} solved`, body: `<ul class="case-list">${cards}</ul>` })}
     <button class="btn secondary" data-action="home">${icon('back')}Back to dashboard</button>
@@ -292,6 +295,9 @@ function openCase(id) {
   inv = active?.caseId === id ? active : S.newInvestigation(c, ctx.now());
   inv.verdict ??= null;
   inv.writeup ??= '';
+  inv.confidence ??= null;
+  inv.gaps ??= [];
+  inv.steps ??= [];
   st().siem.active = inv;
   live = inv.query.text || '';
   openRow = null;
@@ -383,7 +389,8 @@ function renderInvestigation() {
   ctx.setScreen('siem-inv');
   ctx.render(`
     ${ctx.statusBar()}
-    ${qbar('SIEM', `${c.title} · ${DIFF[c.difficulty][0]}`, 'siem', 'Back to cases')}
+    ${qbar('SIEM', `${c.title} · ${DIFF[c.difficulty][0]}${c.ambiguous ? ' · Ambiguous' : ''}`, 'siem', 'Back to cases')}
+    ${c.ambiguous ? `<div class="alert warn amb-banner" role="note"><div class="alert-tag">${icon('alert')}<span>Ambiguous case</span></div><div class="alert-msg">The data may not settle this one. Find what you can, notice what's <b>missing</b>, then make the call anyway, and say how sure you are.</div></div>` : ''}
     <section class="alert-card sev-${a.severity}" aria-label="Alert">
       <div class="ac-head">${icon('alert')}<span class="mono">${esc(a.id)}</span>${ctx.chip(SEV[a.severity] || ['Alert', 'warn'])}<span class="ac-time mono">${esc(c.date)} ${esc(a.time)}</span></div>
       <div class="ac-name">${esc(a.name)}</div>
@@ -406,15 +413,47 @@ function renderInvestigation() {
       id: 'siem-verdict',
       body: `<div class="label">Verdict</div>
         <div class="verdicts" role="radiogroup" aria-label="Verdict">${Object.entries(VERDICTS).map(([id, v]) => `<button class="verdict v-${id} ${inv.verdict === id ? 'on' : ''}" role="radio" aria-checked="${inv.verdict === id}" data-action="siem-verdict" data-v="${id}"><b>${esc(v.label)}</b><span>${esc(v.help)}</span></button>`).join('')}</div>
+        ${c.ambiguous ? ambiguousFields(c) : ''}
         <div class="label spaced">Pinned evidence</div>
         <div id="siem-pinned">${pinnedHtml(c)}</div>
         <label class="field-label spaced" for="siem-writeup">Write-up</label>
-        <textarea id="siem-writeup" class="text-answer writeup" rows="4" maxlength="800" placeholder="What happened, and which evidence proves it? 1–3 sentences.">${esc(inv.writeup)}</textarea>
+        <textarea id="siem-writeup" class="text-answer writeup" rows="4" maxlength="800" placeholder="${c.ambiguous ? 'What do you think happened, what can\'t you confirm, and what would you do next? 1–3 sentences.' : 'What happened, and which evidence proves it? 1–3 sentences.'}">${esc(inv.writeup)}</textarea>
         <p class="small muted" id="siem-wc">${inv.writeup.trim().length} characters${inv.writeup.trim().length < S.MIN_WRITEUP ? ` · at least ${S.MIN_WRITEUP} to count` : ''}</p>
-        <button class="btn primary" data-action="siem-submit" id="siem-submit" ${inv.verdict ? '' : 'disabled'}>${icon('send')}Submit verdict</button>
-        <p class="btn-note" id="siem-note">${inv.verdict ? 'You can still pin more evidence before submitting.' : 'Choose a verdict to submit.'}</p>`,
+        <button class="btn primary" data-action="siem-submit" id="siem-submit" ${canSubmit(c) ? '' : 'disabled'}>${icon('send')}Submit verdict</button>
+        <p class="btn-note" id="siem-note">${submitNote(c)}</p>`,
     })}
   `);
+}
+
+function canSubmit(c) {
+  return !!inv.verdict && (!c.ambiguous || !!inv.confidence);
+}
+function submitNote(c) {
+  if (!inv.verdict) return c.ambiguous ? 'Choose a verdict and a confidence level to submit.' : 'Choose a verdict to submit.';
+  if (c.ambiguous && !inv.confidence) return 'Choose a confidence level to submit.';
+  return 'You can still pin more evidence before submitting.';
+}
+function refreshSubmit(c) {
+  document.getElementById('siem-submit').disabled = !canSubmit(c);
+  document.getElementById('siem-note').textContent = submitNote(c);
+}
+
+/** Extra verdict-panel fields for ambiguous cases: confidence, what's missing, next steps. */
+function ambiguousFields(c) {
+  const ck = (group, id, text) => {
+    const on = inv[group].includes(id);
+    return `<label class="ck ${on ? 'on' : ''}"><input type="checkbox" data-amb="${group}" value="${esc(id)}" ${on ? 'checked' : ''}><span class="ck-box">${icon('check')}</span><span class="ck-text">${esc(text)}</span></label>`;
+  };
+  return `<div class="field-label spaced">Confidence</div>
+    <div class="conf-pick" role="radiogroup" aria-label="Confidence">${Object.entries(CONFIDENCE)
+      .map(([id, x]) => `<button type="button" class="conf-opt c-${id} ${inv.confidence === id ? 'on' : ''}" role="radio" aria-checked="${inv.confidence === id}" data-action="siem-conf" data-conf="${id}"><b>${esc(x.label)}</b><span>${esc(x.help)}</span></button>`)
+      .join('')}</div>
+    <fieldset class="ck-group amb-group"><legend class="field-label spaced">What can't the data tell you? <em>Tick all that apply</em></legend>
+      ${stableOrder(c.gaps, (g) => c.id + g.id).map((g) => ck('gaps', g.id, g.text)).join('')}
+    </fieldset>
+    <fieldset class="ck-group amb-group"><legend class="field-label spaced">Next steps <em>Tick what you would do</em></legend>
+      ${stableOrder(NEXT_STEPS, (x) => c.id + x.id).map((x) => ck('steps', x.id, x.text)).join('')}
+    </fieldset>`;
 }
 
 function refreshResults() {
@@ -451,6 +490,7 @@ function submitInvestigation() {
   const c = caseById(inv.caseId);
   commitQuery();
   const sub = { verdict: inv.verdict, pins: [...inv.pins], writeup: inv.writeup, queries: inv.queries };
+  if (c.ambiguous) Object.assign(sub, { confidence: inv.confidence, gaps: [...inv.gaps], steps: [...inv.steps] });
   const result = S.scoreCase(c, sub);
   const rec = S.recordCase(st(), c, result, ctx.now());
   const g = G.onInvestigation(st().game, st(), CONTENT, { caseDef: c, result, firstSolve: rec.firstSolve, now: ctx.now() });
@@ -473,6 +513,7 @@ function scoreRow(label, pts, max, note, cls = '') {
 function renderSiemFeedback() {
   const { caseId, sub, result: r, rec, xp } = siemResult;
   const c = caseById(caseId);
+  if (c.ambiguous) return renderAmbiguousFeedback(c, sub, r, rec, xp);
   const V = VERDICTS;
   const pins = new Set(sub.pins);
   const keyHtml = c.key
@@ -530,6 +571,109 @@ function renderSiemFeedback() {
   `);
 }
 
+const RATING = { best: ['Best', 'ok'], ok: ['Reasonable', 'info'], bad: ['Harmful', 'crit'] };
+const CONF_NOTE = { calibrated: 'calibrated', overconfident: 'overconfident', underconfident: 'a bit cautious', none: 'not given' };
+
+function keyEvidenceHtml(c, r, pins) {
+  return c.key
+    .map((k) => {
+      const found = r.evidence.found.includes(k.id);
+      const row = c.logs.find((x) => x.id === (k.rows.find((id) => pins.has(id)) || k.rows[0]));
+      return `<li class="kev ${found ? 'found' : 'missed'}">
+          <div class="kev-head">${icon(found ? 'check' : 'x')}<b>${esc(k.label)}</b>${ctx.chip(found ? ['Found', 'ok'] : ['Missed', 'crit'])}</div>
+          <ol class="log-list mini">${logRow(row, { interactive: false, mark: found ? 'found' : 'missed' })}</ol>
+          <p class="small">${ctx.rich(k.why)}</p>
+        </li>`;
+    })
+    .join('');
+}
+
+function renderAmbiguousFeedback(c, sub, r, rec, xp) {
+  const V = VERDICTS;
+  const pins = new Set(sub.pins);
+  const v = r.verdict;
+  const vCls = v.preferred ? 'ok-text' : v.defensible ? 'warn-text' : 'crit-text';
+  const vLabel = v.preferred ? 'Preferred call' : v.defensible ? 'Defensible call' : 'Not defensible';
+  const gapsPicked = new Set(sub.gaps || []);
+  const gapHtml = c.gaps
+    .map((g) => {
+      const on = gapsPicked.has(g.id);
+      const cls = g.correct ? (on ? 'right' : 'missed') : on ? 'wrong' : 'skip';
+      const tag = g.correct ? (on ? ['Spotted', 'ok'] : ['Missed', 'warn']) : on ? ['Not a real gap', 'crit'] : ['Rightly skipped', 'dim'];
+      return `<li class="opt-fb ${cls}"><div class="opt-head">${icon(on ? 'check' : g.correct ? 'clock' : 'x')}<span>${esc(g.text)}</span>${ctx.chip(tag)}</div><p class="small muted">${ctx.rich(g.why)}</p></li>`;
+    })
+    .join('');
+  const stepsPicked = new Set(sub.steps || []);
+  const stepHtml = NEXT_STEPS.map((x) => {
+    const rt = c.steps[x.id];
+    const on = stepsPicked.has(x.id);
+    const cls = `r-${rt.rating} ${on ? 'on' : ''}`;
+    return `<li class="opt-fb ${cls}"><div class="opt-head"><span class="ck-box ${on ? 'on' : ''}">${icon('check')}</span><span>${esc(x.text)}</span>${ctx.chip(RATING[rt.rating])}</div><p class="small muted">${ctx.rich(rt.why)}</p></li>`;
+  }).join('');
+  const noise = r.evidence.noise.map((id) => c.logs.find((x) => x.id === id)).filter(Boolean);
+  const argHtml = Object.entries(c.arguments)
+    .map(([vid, text]) => `<li class="arg v-${vid}"><div class="arg-head"><b>${esc(V[vid].label)}</b>${vid === c.verdict ? ctx.chip(['Preferred', 'ok']) : ctx.chip([`Defensible · ${Math.round(c.defensible[vid] * S.AMBIG_WEIGHTS.verdict)}/${S.AMBIG_WEIGHTS.verdict}`, 'warn'])}</div><p class="small">${ctx.rich(text)}</p></li>`)
+    .join('');
+  const notDef = Object.keys(V).filter((id) => !c.defensible[id]);
+  const o = c.outcome;
+  const outcomeAgrees = o && o.verdict === sub.verdict;
+  ctx.setScreen('siem-result');
+  ctx.render(`
+    ${ctx.statusBar()}
+    ${qbar('SIEM', `${c.title} · result`, 'siem', 'Back to cases')}
+    ${ctx.panel({
+      title: 'Judgment score',
+      icon: r.passed ? 'check' : 'x',
+      meta: `${esc(c.alert.id)} · ambiguous`,
+      hud: true,
+      cls: `feedback ${r.passed ? 'fb-ok' : 'fb-bad'}`,
+      body: `<div class="result-top">
+          <div class="readout-block"><div class="readout big">${r.total}<small>/100</small></div><div class="label">${esc(r.grade)}</div></div>
+          <div class="verdict-line">
+            <div class="label">Your call</div>
+            <div class="vl-given ${vCls}">${icon(v.defensible ? 'check' : 'x')}${esc(sub.verdict ? V[sub.verdict].label : 'No verdict')}</div>
+            <div class="small"><b class="${vCls}">${vLabel}</b> · confidence <b class="${r.confidence.note === 'overconfident' ? 'crit-text' : ''}">${esc(sub.confidence ? CONFIDENCE[sub.confidence].label : '-')}</b></div>
+            <div class="small muted">${r.passed ? (rec.firstSolve ? 'Case solved.' : 'Solved again.') : v.defensible ? `Defensible call, but under ${S.PASS_SCORE} points: the reasoning needs work.` : 'Not solved: the evidence can\'t support that call.'}</div>
+          </div>
+        </div>
+        <ul class="sc-list">
+          ${scoreRow('Verdict', v.points, v.max, v.preferred ? 'preferred call' : v.defensible ? 'defensible' : 'not defensible')}
+          ${scoreRow("What's missing", r.gaps.points, r.gaps.max, `${r.gaps.right.length}/${c.gaps.filter((g) => g.correct).length} gaps spotted${r.gaps.wrong.length ? ` · ${r.gaps.wrong.length} false` : ''}`)}
+          ${scoreRow('Next steps', r.steps.points, r.steps.max, `${r.steps.best.length}/${r.steps.best.length + r.steps.missed.length} best${r.steps.bad.length ? ` · ${r.steps.bad.length} harmful` : ''}`)}
+          ${scoreRow('Confidence', r.confidence.points, r.confidence.max, CONF_NOTE[r.confidence.note], r.confidence.note === 'overconfident' ? 'crit' : '')}
+          ${scoreRow('Evidence', r.evidence.points, r.evidence.max, `${r.evidence.found.length}/${c.key.length} found${r.evidence.penalty ? ` · −${r.evidence.penalty} noise` : ''}`)}
+          ${scoreRow('Write-up', r.writeup.points, r.writeup.max, r.writeup.tooShort ? 'too short to count' : `${r.writeup.hits.length}/${c.writeup.length} points covered`)}
+        </ul>
+        ${r.confidence.note === 'overconfident' ? `<p class="small crit-text conf-warn">${icon('alert')}"High" means the data proves it. On a case where key facts are missing, that's overconfidence, even if your call turns out right.</p>` : ''}
+        ${xp.xp ? `<div class="xp-earned"><div class="label row"><span>XP earned</span><b class="mono xp-gain">+${xp.xp} XP</b></div><ul class="xp-list">${xp.breakdown.map((b) => `<li><span>${esc(b.label)}</span><span class="mono">+${b.amount}</span></li>`).join('')}</ul></div>` : `<p class="small muted">No new XP: you have already been paid for a score of ${st().siem.cases[c.id].paid || 0}. Beat it to earn more.</p>`}`,
+    })}
+    ${ctx.panel({ title: 'Why either call could be defended', icon: 'layers', body: `<ul class="arg-list">${argHtml}</ul>${notDef.length ? `<p class="small muted">Not defensible: ${notDef.map((id) => esc(V[id].label)).join(', ')}. The activity really happened, so the alert isn't wrong.</p>` : ''}` })}
+    ${ctx.panel({ title: 'What a senior analyst would do', icon: 'target', body: `<p class="explanation">${ctx.rich(c.explanation)}</p><ul class="strong-list">${c.strong.map((x) => `<li>${ctx.rich(x)}</li>`).join('')}</ul>` })}
+    ${ctx.panel({ title: 'What would settle it', icon: 'crosshair', cls: 'settle-panel', body: `<ul class="settle-list">${c.settle.map((x) => `<li>${ctx.rich(x)}</li>`).join('')}</ul>` })}
+    ${ctx.panel({ title: "What's missing", icon: 'search', meta: `${r.gaps.points}/${r.gaps.max}`, body: `<ul class="opt-fb-list">${gapHtml}</ul>` })}
+    ${ctx.panel({ title: 'Your next steps', icon: 'list', meta: `${r.steps.points}/${r.steps.max}`, body: `<ul class="opt-fb-list">${stepHtml}</ul>` })}
+    ${ctx.panel({ title: 'Key evidence', icon: 'pin', meta: `${r.evidence.found.length}/${c.key.length}`, body: `<ul class="kev-list">${keyEvidenceHtml(c, r, pins)}</ul>${noise.length ? `<div class="label spaced warn-text">Pinned but not evidence (−${S.AMBIG_NOISE_PENALTY} each)</div><ol class="log-list mini">${noise.map((x) => logRow(x, { interactive: false, mark: 'noise' })).join('')}</ol>` : ''}
+        <div class="label spaced">Your write-up</div>
+        <blockquote class="quote">${sub.writeup.trim() ? esc(sub.writeup) : '<em>(empty)</em>'}</blockquote>
+        <ul class="wu-list small">${c.writeup.map((w) => `<li class="${r.writeup.hits.includes(w.label) ? 'ok-text' : 'muted'}">${icon(r.writeup.hits.includes(w.label) ? 'check' : 'x')}${esc(w.label)}</li>`).join('')}</ul>` })}
+    ${
+      o
+        ? `<details class="outcome" id="siem-outcome">
+        <summary><span class="oc-ico">${icon('clock')}</span><span class="oc-main"><b>Reveal what happened next</b><em>Extra data that came in later</em></span></summary>
+        <div class="oc-body">
+          <div class="oc-title">${ctx.chip([V[o.verdict].short, o.verdict === 'tp' ? 'crit' : o.verdict === 'btp' ? 'warn' : 'ok'])}<b>${esc(o.title)}</b></div>
+          <p>${ctx.rich(o.text)}</p>
+          <p class="oc-note small">${icon('shield')}<span>Your score doesn't change. It grades your reasoning with the data you had${outcomeAgrees ? '. Your call matched the outcome this time, but on another day the same evidence could go the other way' : '. The outcome differs from your call, and a well-reasoned call can still be overtaken by facts nobody had yet'}.</span></p>
+        </div>
+      </details>`
+        : ''
+    }
+    <button class="btn primary" data-action="siem-open" data-case="${c.id}">${icon('review')}Investigate again</button>
+    <button class="btn secondary" data-action="siem">${icon('list')}Back to cases</button>
+    <button class="btn secondary" data-action="home">${icon('back')}Dashboard</button>
+  `);
+}
+
 // =================================================================== capstone
 
 let cap = null; // { id, view: 'overview'|'stage'|'escalation'|'result', stageId, answers, sel, result }
@@ -544,7 +688,16 @@ function renderCapstone() {
 }
 
 function lessonChips(ids) {
-  return ids.map((id) => `<button class="lesson-chip" data-action="open-lesson" data-skill="${id}">${icon('book')}${esc(ctx.skillName(id))}</button>`).join('');
+  return ids.map((id) => `<button class="lesson-chip" data-action="open-lesson" data-skill="${id}" data-from="capstone">${icon('book')}${esc(ctx.skillName(id))}</button>`).join('');
+}
+
+/** Called by app.js when a lesson opened from the capstone is closed: back to where we were. */
+export function resumeCapstone() {
+  if (!cap) return false;
+  renderCapstone();
+  if (cap.view === 'overview') document.querySelector('.stage-list')?.scrollIntoView({ block: 'start' });
+  else window.scrollTo(0, 0);
+  return true;
 }
 
 function renderCapOverview(sc) {
@@ -873,8 +1026,16 @@ export function handleClick(action, el) {
         b.classList.toggle('on', b.dataset.v === inv.verdict);
         b.setAttribute('aria-checked', String(b.dataset.v === inv.verdict));
       }
-      document.getElementById('siem-submit').disabled = false;
-      document.getElementById('siem-note').textContent = 'You can still pin more evidence before submitting.';
+      refreshSubmit(caseById(inv.caseId));
+      return true;
+    case 'siem-conf':
+      inv.confidence = el.dataset.conf;
+      ctx.save();
+      for (const b of document.querySelectorAll('.conf-opt')) {
+        b.classList.toggle('on', b.dataset.conf === inv.confidence);
+        b.setAttribute('aria-checked', String(b.dataset.conf === inv.confidence));
+      }
+      refreshSubmit(caseById(inv.caseId));
       return true;
     case 'siem-submit':
       submitInvestigation();
@@ -965,6 +1126,16 @@ export function handleInput(e) {
   }
   if (inv && t.dataset.field && e.type === 'change') {
     setQuery({ ...currentQuery(), [t.dataset.field]: t.value });
+    return undefined;
+  }
+  if (inv && t.dataset.amb && t.type === 'checkbox') {
+    const group = t.dataset.amb;
+    const set = new Set(inv[group] || []);
+    if (t.checked) set.add(t.value);
+    else set.delete(t.value);
+    inv[group] = [...set];
+    t.closest('.ck')?.classList.toggle('on', t.checked);
+    ctx.save();
     return undefined;
   }
   if (inv && t.id === 'siem-writeup') {

@@ -640,7 +640,7 @@ function lessonHeader(lesson, stage) {
   ];
   return `${statusBar()}
     <header class="qbar">
-      <button class="icon-btn" data-action="lesson-exit" aria-label="${lessonView.snapshot ? 'Back to question' : 'Close lesson'}">${icon(lessonView.snapshot ? 'back' : 'x')}</button>
+      <button class="icon-btn" data-action="lesson-exit" aria-label="${lessonView.snapshot ? 'Back to question' : lessonView.returnTo === 'capstone' ? 'Back to the capstone' : 'Close lesson'}">${icon(lessonView.snapshot || lessonView.returnTo === 'capstone' ? 'back' : 'x')}</button>
       <div class="qbar-mid">${chip(['Lesson', 'info'], 'mode')}<span class="skill-label">${esc(skillName(lesson.skill))}</span></div>
       <div class="qread"><b class="readout">${lessonMinutes(lesson)}<small>min</small></b><span class="label">Read</span></div>
     </header>
@@ -684,6 +684,12 @@ function renderLessonOffer(lesson) {
 function lessonFooter(lesson, stage) {
   const lv = lessonView;
   if (lv.snapshot) return `<button class="btn primary" data-action="lesson-exit">${icon('back')}Back to the question</button>`;
+  if (lv.returnTo === 'capstone') {
+    const back = `<button class="btn ${stage === 'done' ? 'primary' : 'secondary'}" data-action="lesson-exit">${icon('back')}Back to the capstone</button>`;
+    if (stage === 'read') return `<button class="btn primary" data-action="lesson-go" data-stage="worked">Next: worked example${icon('next')}</button>${back}`;
+    if (stage === 'done') return `${back}<button class="btn ghost" data-action="lesson-go" data-stage="read">Review the lesson</button>`;
+    return '';
+  }
   const practice = lv.gate
     ? `<button class="btn primary" data-action="lesson-finish">${icon('play')}${lv.offer ? 'Continue to the check' : 'Start practice'}</button>`
     : E.skillStatus(state, CONTENT, lesson.skill) === 'locked'
@@ -887,6 +893,7 @@ function lessonExit() {
     return;
   }
   if (lv?.returnTo === 'report') return renderReport();
+  if (lv?.returnTo === 'capstone' && OPS.resumeCapstone()) return undefined;
   renderHome();
 }
 
@@ -1458,7 +1465,7 @@ app.addEventListener('click', (e) => {
     case 'open-lesson': {
       const from = el.dataset.from;
       const fromQuestion = from === 'question' && !!current && !!document.querySelector('.question');
-      return openLesson(el.dataset.skill, { section: el.dataset.section || null, fromQuestion, returnTo: from === 'report' ? 'report' : null });
+      return openLesson(el.dataset.skill, { section: el.dataset.section || null, fromQuestion, returnTo: from === 'report' || from === 'capstone' ? from : null });
     }
     case 'lesson-go':
       if (!lessonView) return undefined;

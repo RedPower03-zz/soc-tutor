@@ -16,6 +16,15 @@
 //   parQueries: number of searches a focused analyst needs (efficiency score)
 //   writeup: [{ label, any: [keywords] }]  what a good write-up mentions (case-insensitive)
 //   explanation, strong: [bullets]  feedback shown after submitting
+//
+// Ambiguous cases add (see content/siem-ambiguous.js and js/siem.js scoreAmbiguous):
+//   ambiguous: true, verdict = the preferred call
+//   defensible: { tp: 1, btp: 0.75 }   verdict credit; a verdict not listed is not defensible
+//   confidence: { low, medium, high }  credit for each confidence level (high is 0: overconfident)
+//   gaps: [{ id, text, correct, why }]  "what can't the data tell you?" options
+//   steps: { [NEXT_STEPS id]: { rating: 'best'|'ok'|'bad', why } }
+//   arguments: { [verdict]: text }  why each defensible call can be argued
+//   settle: [bullets]  what would settle it;  outcome: { title, verdict, text }  revealed afterwards
 
 export const SIEM_SOURCES = {
   winevt: { label: 'Windows event logs', code: 'WIN' },
@@ -23,6 +32,8 @@ export const SIEM_SOURCES = {
   firewall: { label: 'Firewall', code: 'FW' },
   dns: { label: 'DNS', code: 'DNS' },
   proxy: { label: 'Web proxy', code: 'PRXY' },
+  idp: { label: 'Cloud sign-in logs', code: 'IDP' },
+  ops: { label: 'Ops & SIEM health', code: 'OPS' },
 };
 
 export const VERDICTS = {
@@ -30,6 +41,25 @@ export const VERDICTS = {
   btp: { label: 'Benign true positive', short: 'BTP', help: 'The detected activity really happened, but it is authorised or expected.' },
   fp: { label: 'False positive', short: 'FP', help: 'The alert is wrong: the activity it describes did not happen. Tune the rule.' },
 };
+
+// Ambiguous cases (content/siem-ambiguous.js): the confidence scale and the shared list of
+// next steps. Each ambiguous case rates every next step as 'best', 'ok' (neutral) or 'bad'.
+export const CONFIDENCE = {
+  low: { label: 'Low', help: 'Could easily be either. I am acting on a hunch.' },
+  medium: { label: 'Medium', help: 'Leaning one way, but key facts are missing.' },
+  high: { label: 'High', help: 'The data proves it.' },
+};
+
+export const NEXT_STEPS = [
+  { id: 'more-logs', text: 'Request the missing logs (from the host itself, the log pipeline team or the archive)' },
+  { id: 'verify-user', text: 'Verify with the user or their manager through a known-good channel (phone, not email)' },
+  { id: 'check-edr', text: 'Check the host in EDR: file hash, signer, creation time, process history' },
+  { id: 'escalate', text: 'Escalate to Tier 2 with your confidence and the open questions stated' },
+  { id: 'contain', text: 'Contain as a precaution (isolate the host or revoke sessions) while you verify' },
+  { id: 'close', text: 'Close the alert: nothing proves it is malicious' },
+  { id: 'wait', text: 'Leave it open and see whether it happens again' },
+  { id: 'reimage', text: 'Wipe and reimage the host straight away' },
+];
 
 export const SIEM_CASES = [
   // ------------------------------------------------------------------ 1

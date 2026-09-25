@@ -148,6 +148,7 @@ export const BADGES = [
   { id: 'case-closed', name: 'Case Closed', icon: 'search', description: 'Solve your first SIEM investigation (right verdict, 60+ score).', progress: (g) => count(g.counters.casesSolved, 1) },
   { id: 'sharp-eye', name: 'Sharp Eye', icon: 'target', title: 'Sharp Eye', description: 'Pin every key piece of evidence in a case with no noise pins.', progress: (g) => count(g.counters.perfectEvidence, 1) },
   { id: 'false-alarm', name: 'Not Today', icon: 'shield', description: 'Correctly clear a false or benign alert without escalating it.', progress: (g) => count(g.counters.benignCleared, 1) },
+  { id: 'grey-area', name: 'Grey Area', icon: 'target', title: 'Grey Area Analyst', description: 'Solve an ambiguous case with 80+ points, calibrated confidence and no harmful next steps.', progress: (g) => count(g.counters.calibratedCalls, 1) },
   { id: 'siem-sleuth', name: 'SIEM Sleuth', icon: 'search', title: 'SIEM Sleuth', description: 'Solve every SIEM investigation case.', progress: (g, st, c) => ({ current: solvedCases(st, c), target: (c.siemCases || []).length || 1 }) },
   { id: 'shift-complete', name: 'Shift Complete', icon: 'flag', title: 'Night Watch', description: 'Finish the First shift capstone with an escalation report.', progress: (g) => count(g.counters.capstonesDone, 1) },
   { id: 'clean-handoff', name: 'Clean Handoff', icon: 'check', description: 'Score 85% or more on an escalation report.', progress: (g) => count(g.counters.cleanHandoffs, 1) },
@@ -203,6 +204,7 @@ export function createGame() {
       casesSolved: 0,
       perfectEvidence: 0,
       benignCleared: 0,
+      calibratedCalls: 0,
       capstonesDone: 0,
       cleanHandoffs: 0,
     },
@@ -649,12 +651,16 @@ export function onInvestigation(game, st, content, { caseDef, result, firstSolve
   if (effective > paid) {
     rec.paid = effective;
     const amount = Math.round((rate * (effective - paid)) / 100);
-    if (amount > 0) breakdown.push({ label: paid ? `Case improved (${paid} → ${effective})` : `Case score ${result.total}${result.passed ? '' : ', wrong call (×0.25)'}`, amount });
+    if (amount > 0) breakdown.push({ label: paid ? `Case improved (${paid} → ${effective})` : `Case score ${result.total}${result.passed ? '' : result.verdict.correct || result.verdict.defensible ? ', below the pass mark (×0.25)' : ', wrong call (×0.25)'}`, amount });
   }
   const c = game.counters;
   if (firstSolve) {
     c.casesSolved += 1;
-    if (caseDef.verdict !== 'tp') c.benignCleared += 1;
+    if (result.verdict.given && result.verdict.given !== 'tp') c.benignCleared += 1;
+  }
+  if (caseDef.ambiguous && result.passed && result.total >= 80 && result.confidence.note === 'calibrated' && !result.steps.bad.length && !rec.calibrated) {
+    rec.calibrated = true;
+    c.calibratedCalls += 1;
   }
   if (result.passed && result.evidence.perfect && !rec.perfect) {
     rec.perfect = true;
