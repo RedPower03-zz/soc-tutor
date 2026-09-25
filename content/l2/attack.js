@@ -10,15 +10,15 @@ const items = [
     type: 'mc',
     prompt: 'In MITRE ATT&CK, what is the difference between a **tactic** and a **technique**?',
     choices: [
-      'A tactic is the adversary\'s goal (the why, e.g. Persistence); a technique is how they achieve it (e.g. Scheduled Task)',
+      'A tactic is the goal (why); a technique is how it is achieved',
       'A tactic is a specific tool; a technique is a group of attackers',
-      'They mean the same thing',
-      'A technique is the goal; a tactic is how it is done',
+      'They mean the same thing and ATT&CK uses them interchangeably',
+      'A technique is the goal; a tactic is how that goal is achieved',
     ],
-    answer: 'A tactic is the adversary\'s goal (the why, e.g. Persistence); a technique is how they achieve it (e.g. Scheduled Task)',
+    answer: 'A tactic is the goal (why); a technique is how it is achieved',
     misconceptions: {
-      'A technique is the goal; a tactic is how it is done': 'attack-tactic-technique',
-      'They mean the same thing': 'attack-tactic-technique',
+      'A technique is the goal; a tactic is how that goal is achieved': 'attack-tactic-technique',
+      'They mean the same thing and ATT&CK uses them interchangeably': 'attack-tactic-technique',
     },
     explanation:
       'Tactics (TA####) are the columns of the matrix: the adversary\'s tactical objective. Techniques (T####) and sub-techniques (T####.###) are the ways to reach it, and **procedures** are the specific implementations a group or tool uses. Scheduled Task/Job (T1053) serves Execution, Persistence and Privilege Escalation.',
@@ -44,8 +44,8 @@ const items = [
     choices: [
       'T1003.001 OS Credential Dumping: LSASS Memory (Credential Access)',
       'T1059.001 Command and Scripting Interpreter: PowerShell (Execution)',
-      'T1547.001 Registry Run Keys (Persistence)',
-      'T1486 Data Encrypted for Impact (Impact)',
+      'T1547.001 Registry Run Keys / Startup Folder (Persistence)',
+      'T1218.011 System Binary Proxy Execution: Rundll32 (Stealth)',
     ],
     answer: 'T1003.001 OS Credential Dumping: LSASS Memory (Credential Access)',
     explanation:
@@ -59,12 +59,12 @@ const items = [
     prompt: 'Which technique does this map to?',
     snippet: String.raw`reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v OneDriveUpd /d "C:\Users\ali\AppData\Local\odu.exe" /f`,
     choices: [
-      'T1547.001 Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder',
+      'T1547.001 Registry Run Keys / Startup Folder',
       'T1053.005 Scheduled Task/Job: Scheduled Task',
-      'T1112 Modify Registry, and nothing else',
-      'T1021.001 Remote Services: RDP',
+      'T1112 Modify Registry, and nothing else at all',
+      'T1543.003 Create or Modify System Process: Windows Service',
     ],
-    answer: 'T1547.001 Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder',
+    answer: 'T1547.001 Registry Run Keys / Startup Folder',
     explanation:
       'A value under ...\\CurrentVersion\\Run launches the program at each logon of that user: T1547.001, used for Persistence (and Privilege Escalation when set under HKLM). It also technically modifies the registry, but the most specific, meaningful mapping is the Run key sub-technique.',
   },
@@ -74,9 +74,16 @@ const items = [
     difficulty: 2,
     type: 'mc',
     prompt: 'On WS-ENG-14 you see event 7045 "A service was installed: PSEXESVC" and a 4624 Logon Type 3 from SRV-APP03 with account svc_deploy seconds earlier. Which **tactic** is this?',
-    choices: ['Lateral Movement', 'Initial Access', 'Exfiltration', 'Reconnaissance'],
+    choices: [
+      'Lateral Movement',
+      'Initial Access',
+      'Exfiltration',
+      'Credential Access',
+    ],
     answer: 'Lateral Movement',
-    misconceptions: { 'Initial Access': 'attack-framework-mixup' },
+    misconceptions: {
+      'Initial Access': 'attack-framework-mixup',
+    },
     explanation:
       'PsExec copies a service binary over the ADMIN$ share (SMB/Windows Admin Shares, T1021.002) and runs it as a service (Service Execution, T1569.002): moving from SRV-APP03 to WS-ENG-14 with valid credentials. Initial Access is how the attacker first got into the network, not a hop between internal hosts.',
   },
@@ -96,7 +103,12 @@ const items = [
     difficulty: 1,
     type: 'mc',
     prompt: 'In the Lockheed Martin **Cyber Kill Chain**, a compromised laptop beaconing to the attacker\'s server every 60 seconds is in which phase?',
-    choices: ['Command and Control', 'Weaponization', 'Reconnaissance', 'Delivery'],
+    choices: [
+      'Command and Control',
+      'Weaponization',
+      'Actions on Objectives',
+      'Delivery',
+    ],
     answer: 'Command and Control',
     explanation:
       'The seven phases: Reconnaissance, Weaponization, Delivery, Exploitation, Installation, Command and Control (C2), Actions on Objectives. A beacon means the implant is installed and checking in for instructions. ATT&CK has a Command and Control tactic too, but it is far more granular and not a strict sequence.',
@@ -120,13 +132,15 @@ const items = [
     type: 'mc',
     prompt: 'The detection team says: "We have a rule for T1059.001 (PowerShell), so we\'re covered." The rule matches `powershell.exe -enc`. Why is that claim too strong?',
     choices: [
-      'A technique has many procedures: attackers use -e, -EncodedCommand, obfuscation, pwsh.exe, or load the PowerShell engine inside another process',
-      'T1059.001 is not a real technique',
-      'PowerShell attacks are always blocked by antivirus',
-      'The claim is correct: one rule per technique is full coverage',
+      'One technique has many procedures; one command line is just one of them',
+      'T1059.001 is not a real ATT&CK technique, so it cannot be covered',
+      'PowerShell attacks are always blocked by antivirus, so the rule is moot',
+      'The claim is correct: one rule per technique means full coverage',
     ],
-    answer: 'A technique has many procedures: attackers use -e, -EncodedCommand, obfuscation, pwsh.exe, or load the PowerShell engine inside another process',
-    misconceptions: { 'The claim is correct: one rule per technique is full coverage': 'attack-coverage-checkbox' },
+    answer: 'One technique has many procedures; one command line is just one of them',
+    misconceptions: {
+      'The claim is correct: one rule per technique means full coverage': 'attack-coverage-checkbox',
+    },
     explanation:
       'Coverage is per **procedure**, not per technique ID. PowerShell accepts abbreviated parameters (-e, -en, -enc...), can be heavily obfuscated, and its engine (System.Management.Automation) can run without powershell.exe at all. A green cell on a coverage map means "we detect at least one way", not "we detect this technique".',
   },
@@ -137,12 +151,12 @@ const items = [
     type: 'mc',
     prompt: 'You confirm credential dumping (T1003.001) on a server. How does ATT&CK help you decide what to look for next?',
     choices: [
-      'Stolen credentials are usually used next: look for Lateral Movement and Valid Accounts use (new logons from that server, RDP, SMB, PsExec)',
-      'It tells you the attacker\'s name and location',
-      'It tells you to close the alert, as dumping is the final step',
-      'It does not: ATT&CK is only for reports',
+      'Stolen credentials get used next: hunt lateral movement from that server',
+      'It tells you the attacker\'s name, country and which group they belong to',
+      'It tells you to close the alert, as credential dumping is the final step',
+      'It does not help: ATT&CK is only meant for writing reports afterwards',
     ],
-    answer: 'Stolen credentials are usually used next: look for Lateral Movement and Valid Accounts use (new logons from that server, RDP, SMB, PsExec)',
+    answer: 'Stolen credentials get used next: hunt lateral movement from that server',
     explanation:
       'ATT&CK gives you a map of what usually comes before and after. Credentials are dumped to be used: pivot to logons **from** that host and **by** the accounts that were on it (T1078 Valid Accounts, T1021 Remote Services). Attribution to a group is a separate, much harder question.',
   },
@@ -153,7 +167,12 @@ const items = [
     type: 'mc',
     prompt: 'Minutes after a new foothold, EDR records these commands. Which tactic are they?',
     snippet: 'whoami /groups\nnet group "Domain Admins" /domain\nnltest /dclist:corp.example\nnltest /domain_trusts',
-    choices: ['Discovery', 'Exfiltration', 'Impact', 'Collection'],
+    choices: [
+      'Discovery',
+      'Exfiltration',
+      'Impact',
+      'Collection',
+    ],
     answer: 'Discovery',
     explanation:
       'The attacker is learning the environment: their own privileges, who the domain admins are (T1087.002 Account Discovery: Domain Account), where the domain controllers are, and which domains trust this one (T1482 Domain Trust Discovery). Discovery bursts right after a foothold are a strong signal, because normal users almost never run these.',
@@ -167,8 +186,8 @@ const items = [
     choices: [
       'T1490 Inhibit System Recovery (Impact)',
       'T1003 OS Credential Dumping (Credential Access)',
-      'T1566 Phishing (Initial Access)',
-      'T1071 Application Layer Protocol (Command and Control)',
+      'T1070.004 File Deletion (Stealth)',
+      'T1485 Data Destruction (Impact)',
     ],
     answer: 'T1490 Inhibit System Recovery (Impact)',
     explanation:
@@ -192,13 +211,15 @@ const items = [
     type: 'mc',
     prompt: 'The coverage heatmap shows T1003.001 (LSASS Memory) green: there is a rule that alerts on mimikatz command lines. In a red-team exercise, LSASS was dumped with a signed tool (procdump) and nothing fired. What went wrong?',
     choices: [
-      'The rule detected one procedure (the mimikatz tool), not the behaviour (any process reading LSASS memory)',
-      'The heatmap was right: procdump is not credential dumping',
-      'The red team broke the rules by using a signed tool',
-      'LSASS cannot be dumped with signed tools',
+      'It caught one procedure (mimikatz), not the behaviour (reading LSASS)',
+      'The heatmap was right: dumping LSASS with procdump is not credential theft',
+      'The red team broke the rules of engagement by using a signed tool',
+      'LSASS cannot be dumped with signed tools, so the red team is mistaken',
     ],
-    answer: 'The rule detected one procedure (the mimikatz tool), not the behaviour (any process reading LSASS memory)',
-    misconceptions: { 'The heatmap was right: procdump is not credential dumping': 'attack-coverage-checkbox' },
+    answer: 'It caught one procedure (mimikatz), not the behaviour (reading LSASS)',
+    misconceptions: {
+      'The heatmap was right: dumping LSASS with procdump is not credential theft': 'attack-coverage-checkbox',
+    },
     explanation:
       'Detect the behaviour: unusual processes opening a handle to lsass.exe with memory-read access, dump files named like lsass*.dmp, comsvcs MiniDump. Tool-name rules turn a heatmap green while leaving most procedures undetected.',
   },

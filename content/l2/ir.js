@@ -1,5 +1,6 @@
 // Level 2 · Incident response: questions, lesson and misconceptions.
-// Built on NIST SP 800-61 (Rev. 2 lifecycle; Rev. 3, April 2025, maps it onto CSF 2.0) and RFC 3227.
+// Built on NIST SP 800-61 Rev. 3 (April 2025, CSF 2.0 functions), the classic Rev. 2 four-phase lifecycle that
+// SOC runbooks still use, and RFC 3227.
 
 const items = [
   {
@@ -7,24 +8,27 @@ const items = [
     skill: 'l2-ir',
     difficulty: 1,
     type: 'mc',
-    prompt: 'What are the phases of the incident response lifecycle in NIST SP 800-61 (Rev. 2), in order?',
+    prompt: 'NIST SP 800-61 **Rev. 3** (April 2025) organises incident response around the six **NIST CSF 2.0 functions**. Which list shows them?',
     choices: [
-      'Preparation → Detection & Analysis → Containment, Eradication & Recovery → Post-Incident Activity',
-      'Detection → Preparation → Recovery → Containment',
-      'Containment → Detection & Analysis → Preparation → Lessons learned',
-      'Reconnaissance → Delivery → Exploitation → Actions on Objectives',
+      'Govern, Identify, Protect, Detect, Respond, Recover',
+      'Prepare, Identify, Contain, Eradicate, Recover, Learn',
+      'Plan, Monitor, Analyse, Contain, Restore, Report',
+      'Recon, Deliver, Exploit, Install, Control, Act',
     ],
-    answer: 'Preparation → Detection & Analysis → Containment, Eradication & Recovery → Post-Incident Activity',
-    misconceptions: { 'Reconnaissance → Delivery → Exploitation → Actions on Objectives': 'ir-phase-mixup' },
+    answer: 'Govern, Identify, Protect, Detect, Respond, Recover',
+    misconceptions: {
+      'Recon, Deliver, Exploit, Install, Control, Act': 'ir-phase-mixup',
+      'Prepare, Identify, Contain, Eradicate, Recover, Learn': 'ir-phase-mixup',
+    },
     explanation:
-      'The four-phase lifecycle is a loop: lessons from Post-Incident Activity feed back into Preparation, and analysis continues during containment. (SANS teaches the same ideas as PICERL: Preparation, Identification, Containment, Eradication, Recovery, Lessons learned.) NIST SP 800-61 Rev. 3 (2025) reorganises the guidance around the CSF 2.0 functions, but these phases remain the everyday working model. The last option is the attacker\'s Kill Chain.',
+      'Rev. 3 replaced the Rev. 2 guide (withdrawn in 2025) and maps incident response onto the CSF 2.0 functions: **Govern, Identify and Protect** cover preparation (policy, roles, asset knowledge, hardening); **Detect, Respond and Recover** are the incident itself; lessons learned feed back through Identify\'s *Improvement* category. Most SOC runbooks still use the classic four-phase loop (Preparation → Detection & Analysis → Containment, Eradication & Recovery → Post-Incident Activity), and SANS teaches PICERL (Prepare, Identify, Contain, Eradicate, Recover, Learn). "Recon, Deliver, Exploit..." is the attacker\'s Kill Chain, not a response model.',
   },
   {
     id: 'ir-02',
     skill: 'l2-ir',
     difficulty: 1,
     type: 'text',
-    prompt: 'In which NIST SP 800-61 phase does the "lessons learned" meeting take place? (two or three words)',
+    prompt: 'In the classic four-phase NIST SP 800-61 lifecycle (Rev. 2, still the model in most SOC runbooks), which phase holds the "lessons learned" meeting? (two or three words)',
     accept: ['post-incident activity', 'post-incident', 'post incident activity', 'post incident', 'post-incident activities'],
     misconceptions: { recovery: 'ir-phase-mixup', eradication: 'ir-phase-mixup', preparation: 'ir-phase-mixup' },
     explanation:
@@ -37,13 +41,15 @@ const items = [
     type: 'mc',
     prompt: 'A laptop is actively beaconing to a C2 server. Why do responders usually **isolate it with EDR** rather than switch it off?',
     choices: [
-      'Powering off destroys volatile evidence (running processes, network connections, injected code, keys in memory); isolation stops the attacker and keeps it',
-      'Switching off takes too long',
-      'EDR isolation deletes the malware automatically',
+      'Powering off loses memory evidence; isolating keeps it',
+      'Switching a laptop off remotely takes too long during an active incident',
+      'EDR isolation deletes the malware automatically, so no clean-up is needed',
       'Laptops cannot be switched off remotely',
     ],
-    answer: 'Powering off destroys volatile evidence (running processes, network connections, injected code, keys in memory); isolation stops the attacker and keeps it',
-    misconceptions: { 'EDR isolation deletes the malware automatically': 'ir-evidence-volatile' },
+    answer: 'Powering off loses memory evidence; isolating keeps it',
+    misconceptions: {
+      'EDR isolation deletes the malware automatically, so no clean-up is needed': 'ir-evidence-volatile',
+    },
     explanation:
       'Much modern malware lives only in memory. Network isolation cuts it off from C2 and the rest of the network while the machine stays running, so you can capture memory and live data. Isolation is containment, not cleaning: the malware is still there until eradication.',
   },
@@ -54,13 +60,15 @@ const items = [
     type: 'mc',
     prompt: 'Following the **order of volatility** (RFC 3227), what do you collect first from a running compromised server?',
     choices: [
-      'Memory (RAM) and live system state such as processes and network connections',
-      'A full image of the hard disk',
-      'Last month\'s backup tapes',
-      'Printouts of the event logs',
+      'Memory, running processes and connections',
+      'A full forensic image of the server\'s hard disk',
+      'Last month\'s backup tapes for a clean comparison',
+      'Printouts of the event logs from the last 24 hours',
     ],
-    answer: 'Memory (RAM) and live system state such as processes and network connections',
-    misconceptions: { 'A full image of the hard disk': 'ir-evidence-volatile' },
+    answer: 'Memory, running processes and connections',
+    misconceptions: {
+      'A full forensic image of the server\'s hard disk': 'ir-evidence-volatile',
+    },
     explanation:
       'Collect the most short-lived data first: CPU state and caches, then memory and routing/ARP/process tables, then temporary files, then disk, then remote logs and archives. The disk will still be there in an hour; the RAM contents will not survive a reboot or even much normal activity.',
   },
@@ -71,12 +79,12 @@ const items = [
     type: 'mc',
     prompt: 'What is the difference between an **event** and an **incident**?',
     choices: [
-      'An event is any observable occurrence; an incident is an event (or series) that violates or threatens security policy',
-      'They are the same thing',
-      'An incident is any log line; an event is a confirmed breach',
-      'Events are on Windows, incidents are on Linux',
+      'An event is any occurrence; an incident violates or threatens policy',
+      'They are the same thing, and the two words can be used interchangeably',
+      'An incident is any log line; an event is a confirmed breach of security',
+      'Events happen on Windows hosts, while incidents happen on Linux hosts',
     ],
-    answer: 'An event is any observable occurrence; an incident is an event (or series) that violates or threatens security policy',
+    answer: 'An event is any occurrence; an incident violates or threatens policy',
     explanation:
       'Millions of events (logons, connections, file writes) happen daily; a few become adverse events worth investigating; a smaller number are declared **incidents**, which triggers the response plan, roles and communications. Declaring an incident is a decision with consequences, so write down when and why you made it.',
   },
@@ -108,13 +116,15 @@ const items = [
     type: 'mc',
     prompt: 'The attacker has footholds on 6 hosts and domain credentials. A colleague wants to clean each host as soon as it is found. Why do responders prefer a **coordinated** eradication?',
     choices: [
-      'Piecemeal clean-up tips the attacker off; they switch to footholds you have not found yet. Scope fully, then remove everything at once',
-      'Cleaning hosts one at a time is slower to type',
-      'Coordinated eradication is required by law',
-      'There is no difference, as long as every host is cleaned eventually',
+      'Piecemeal clean-up tips off the attacker; scope, then act at once',
+      'Cleaning hosts one at a time takes longer to type and document',
+      'Coordinated eradication is required by law in most countries',
+      'No difference, as long as every host is cleaned eventually',
     ],
-    answer: 'Piecemeal clean-up tips the attacker off; they switch to footholds you have not found yet. Scope fully, then remove everything at once',
-    misconceptions: { 'There is no difference, as long as every host is cleaned eventually': 'ir-eradicate-before-scope' },
+    answer: 'Piecemeal clean-up tips off the attacker; scope, then act at once',
+    misconceptions: {
+      'No difference, as long as every host is cleaned eventually': 'ir-eradicate-before-scope',
+    },
     explanation:
       'An attacker watching their implants disappear one by one changes tools, adds persistence or accelerates to ransomware. Contain what is dangerous now (isolate, block), keep scoping, then remove all known persistence, reset credentials and block indicators in one planned window.',
   },
@@ -124,9 +134,16 @@ const items = [
     difficulty: 2,
     type: 'mc',
     prompt: '"Remove the malicious scheduled task, delete the dropped binaries and patch the vulnerable web plugin." Which phase is this?',
-    choices: ['Eradication', 'Recovery', 'Detection & Analysis', 'Preparation'],
+    choices: [
+      'Eradication',
+      'Recovery',
+      'Detection & Analysis',
+      'Preparation',
+    ],
     answer: 'Eradication',
-    misconceptions: { Recovery: 'ir-phase-mixup' },
+    misconceptions: {
+      'Recovery': 'ir-phase-mixup',
+    },
     explanation:
       '**Eradication** removes the attacker\'s presence and the way in: malware, persistence, compromised accounts, and the vulnerability they used. **Recovery** is returning systems to normal service: restoring from clean backups or builds, validating, and monitoring closely for signs of return.',
   },
@@ -138,12 +155,12 @@ const items = [
     prompt: 'Which event is the **initial access** (patient zero entry point)?',
     snippet: '09:02  SRV-FS01   4624 svc_sql Logon Type 3 from 10.10.4.27\n08:47  WS-FIN-07  svch0st.exe connects to 198.51.100.77:443\n08:41  WS-FIN-07  WINWORD.EXE > powershell.exe -enc ... (Invoice_4471.docm)\n08:40  MAIL-GW    Delivered: "Invoice 4471" to dana@corp.example, attachment Invoice_4471.docm\n09:10  SRV-FS01   7045 service installed: updsvc',
     choices: [
-      '08:40: the phishing email with the macro document delivered to dana',
+      '08:40: the macro email delivered to dana',
       '09:02: svc_sql logging on to the file server',
-      '08:47: the first C2 connection',
+      '08:47: the first C2 connection from WS-FIN-07',
       '09:10: the service installed on SRV-FS01',
     ],
-    answer: '08:40: the phishing email with the macro document delivered to dana',
+    answer: '08:40: the macro email delivered to dana',
     explanation:
       'Sort by time first: the log is out of order. The chain starts with the email delivery (08:40), then execution when dana opened it (08:41), C2 (08:47), lateral movement with svc_sql (09:02) and persistence on the server (09:10). Finding the entry point tells you what to fix and where else to look (other recipients).',
   },
@@ -164,13 +181,15 @@ const items = [
     type: 'mc',
     prompt: 'A server was restored from a clean backup. Three days later the attacker is back, logging in over VPN with the same contractor account. What was missed?',
     choices: [
-      'Eradication was incomplete: the compromised credentials were never reset and the entry point was not closed',
-      'The backup was too old',
-      'Recovery monitoring caught it, so nothing was missed',
-      'The server should have been restored twice',
+      'Eradication missed the stolen account and the VPN entry point',
+      'The backup was too old and still contained the attacker\'s tools',
+      'Recovery monitoring caught it, so in fact nothing was missed',
+      'The server should have been restored twice, not just once',
     ],
-    answer: 'Eradication was incomplete: the compromised credentials were never reset and the entry point was not closed',
-    misconceptions: { 'The backup was too old': 'ir-creds-forgotten' },
+    answer: 'Eradication missed the stolen account and the VPN entry point',
+    misconceptions: {
+      'The backup was too old and still contained the attacker\'s tools': 'ir-creds-forgotten',
+    },
     explanation:
       'Restoring a machine does not revoke what the attacker holds. Eradication must remove access paths: reset (or disable) compromised accounts, revoke sessions, enforce MFA on the VPN, and fix the vulnerability used. Otherwise the attacker simply walks back in.',
   },
@@ -181,15 +200,15 @@ const items = [
     type: 'mc',
     prompt: 'Analysis shows a **domain admin** account\'s credentials were dumped from a server\'s memory. Which eradication step is essential?',
     choices: [
-      'Reset the domain admin and other exposed privileged/service account passwords, and if domain compromise is suspected reset the krbtgt account twice',
+      'Reset all exposed privileged accounts, and krbtgt twice if needed',
       'Reset only the password of the user who opened the phishing email',
-      'Reboot the domain controllers',
-      'Nothing: the server was already reimaged',
+      'Reboot the domain controllers to flush any credentials cached in memory',
+      'Nothing: the server was already reimaged, which removed the stolen hashes',
     ],
-    answer: 'Reset the domain admin and other exposed privileged/service account passwords, and if domain compromise is suspected reset the krbtgt account twice',
+    answer: 'Reset all exposed privileged accounts, and krbtgt twice if needed',
     misconceptions: {
       'Reset only the password of the user who opened the phishing email': 'ir-creds-forgotten',
-      'Nothing: the server was already reimaged': 'ir-creds-forgotten',
+      'Nothing: the server was already reimaged, which removed the stolen hashes': 'ir-creds-forgotten',
     },
     explanation:
       'Every credential that was on that server is burned. With domain admin rights an attacker can forge Kerberos tickets (golden tickets, signed with the krbtgt key), so the krbtgt password is reset **twice** (it keeps the previous key), spaced out to let replication complete. Reimaging the server does nothing about credentials that already left it.',
@@ -201,13 +220,15 @@ const items = [
     type: 'mc',
     prompt: 'Which of these belongs to the **Preparation** phase?',
     choices: [
-      'Writing playbooks, keeping contact lists current, making sure the right logs exist, and running tabletop exercises',
-      'Isolating an infected host',
+      'Writing playbooks and running tabletop exercises',
+      'Isolating an infected host from the network with EDR',
       'Restoring a server from backup',
-      'Writing the final incident report',
+      'Writing the final report after the incident closes',
     ],
-    answer: 'Writing playbooks, keeping contact lists current, making sure the right logs exist, and running tabletop exercises',
-    misconceptions: { 'Writing the final incident report': 'ir-phase-mixup' },
+    answer: 'Writing playbooks and running tabletop exercises',
+    misconceptions: {
+      'Writing the final report after the incident closes': 'ir-phase-mixup',
+    },
     explanation:
       'Preparation is everything done before the incident so the response is fast: plans and playbooks, roles and on-call rotas, out-of-band communication, logging and EDR coverage, forensic tooling, practice. Isolating is containment, restoring is recovery, the final report is post-incident activity.',
   },
@@ -218,12 +239,12 @@ const items = [
     type: 'mc',
     prompt: 'During an active incident the attacker may have access to corporate email. How should the response team coordinate?',
     choices: [
-      'Out of band: a separate chat or phone bridge the attacker cannot read, set up in advance',
-      'Email as usual, marked "Confidential"',
-      'A reply-all thread with the whole company',
-      'Messages in the ticket of the compromised user',
+      'Out of band: a separate bridge the attacker cannot read',
+      'By email as usual, with every message marked Confidential',
+      'Through a reply-all email thread with the whole company',
+      'Through comments in the ticket of the compromised user',
     ],
-    answer: 'Out of band: a separate chat or phone bridge the attacker cannot read, set up in advance',
+    answer: 'Out of band: a separate bridge the attacker cannot read',
     explanation:
       'Attackers in a mailbox read the incident thread and adapt, or delete evidence. Plans should include an out-of-band channel (separate tenant chat, phone bridge) and a contact list that does not live only in the compromised systems.',
   },
@@ -239,7 +260,7 @@ const lesson = {
       heading: 'The lifecycle',
       body: [
         'NIST SP 800-61 describes a loop of four phases: **Preparation**; **Detection & Analysis**; **Containment, Eradication & Recovery**; **Post-Incident Activity**. Analysis continues throughout, and lessons learned feed back into preparation.',
-        'Rev. 3 (April 2025) maps incident response onto the NIST CSF 2.0 functions (Govern, Identify, Protect, Detect, Respond, Recover), but the four phases remain the common working model. SANS uses the same steps under the name PICERL.',
+        '**Rev. 3** (April 2025) replaced Rev. 2 and maps incident response onto the NIST CSF 2.0 functions: **Govern, Identify, Protect** (being prepared), **Detect, Respond, Recover** (handling the incident), with lessons learned flowing back through Identify\'s Improvement category. The four Rev. 2 phases remain the common working model inside SOC runbooks, and SANS uses the same steps under the name PICERL.',
       ],
     },
     {

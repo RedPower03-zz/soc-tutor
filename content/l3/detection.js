@@ -10,13 +10,16 @@ const items = [
     type: 'mc',
     prompt: 'What is **Sigma**?',
     choices: [
-      'A vendor-neutral YAML format for detection rules that can be converted into queries for many SIEMs',
-      'A commercial SIEM product',
-      'An antivirus engine',
-      'A log shipping agent',
+      'A vendor-neutral YAML rule format converted into SIEM queries',
+      'A commercial SIEM product sold with its own detection content',
+      'An antivirus engine that scans files using YAML signatures',
+      'A log shipping agent that forwards events into any SIEM',
     ],
-    answer: 'A vendor-neutral YAML format for detection rules that can be converted into queries for many SIEMs',
-    misconceptions: { 'A commercial SIEM product': 'det-sigma-is-a-product', 'A log shipping agent': 'det-sigma-is-a-product' },
+    answer: 'A vendor-neutral YAML rule format converted into SIEM queries',
+    misconceptions: {
+      'A commercial SIEM product sold with its own detection content': 'det-sigma-is-a-product',
+      'A log shipping agent that forwards events into any SIEM': 'det-sigma-is-a-product',
+    },
     explanation:
       'Sigma is to log detections what YARA is to files: a shared, open rule format. A converter (the pySigma-based `sigma-cli`) turns one rule into Splunk SPL, Microsoft Sentinel KQL, Elastic queries and more. The public SigmaHQ repository holds thousands of community rules.',
   },
@@ -40,13 +43,15 @@ const items = [
     snippet:
       'title: Kerberoasting - RC4 service ticket requests\nstatus: experimental\nlogsource:\n  product: windows\n  service: security\ndetection:\n  selection:\n    EventID: 4769\n    TicketEncryptionType: \'0x17\'\n    Status: \'0x0\'\n  filter_machine:\n    ServiceName|endswith: \'$\'\n  filter_krbtgt:\n    ServiceName: \'krbtgt\'\n  condition: selection and not 1 of filter_*\nlevel: medium\ntags:\n  - attack.credential-access\n  - attack.t1558.003',
     choices: [
-      'Successful RC4 service ticket requests for non-machine, non-krbtgt accounts (possible Kerberoasting)',
-      'Failed logons with bad passwords',
-      'Golden tickets',
-      'Every Kerberos ticket in the domain',
+      'RC4 service tickets for user accounts (Kerberoasting)',
+      'Failed logons with bad passwords against service accounts',
+      'Golden tickets forged with the krbtgt hash on a workstation',
+      'Every Kerberos ticket, for audit',
     ],
-    answer: 'Successful RC4 service ticket requests for non-machine, non-krbtgt accounts (possible Kerberoasting)',
-    misconceptions: { 'Every Kerberos ticket in the domain': 'det-more-alerts-better' },
+    answer: 'RC4 service tickets for user accounts (Kerberoasting)',
+    misconceptions: {
+      'Every Kerberos ticket, for audit': 'det-more-alerts-better',
+    },
     explanation:
       'The selection matches 4769 with encryption 0x17 (RC4) and success; the filters drop computer accounts (names ending in $) and krbtgt, whose tickets are not roasting targets. The tag maps it to T1558.003. In practice, you add a threshold (many SPNs from one client) or known-legacy exclusions to control volume.',
   },
@@ -57,13 +62,16 @@ const items = [
     type: 'mc',
     prompt: 'A new rule fires 400 times a day, and 398 are a backup tool\'s legitimate activity. What is the best fix?',
     choices: [
-      'Add a narrow filter for that tool (signed binary path + service account + host) and keep the rule enabled',
-      'Disable the rule',
-      'Lower its severity to informational and ignore it',
-      'Leave it: more alerts means better coverage',
+      'Filter that tool narrowly and keep the rule enabled',
+      'Disable the rule, since almost every alert it raises is noise',
+      'Lower its severity to informational and stop looking at it',
+      'Leave it as it is: more alerts always means better coverage',
     ],
-    answer: 'Add a narrow filter for that tool (signed binary path + service account + host) and keep the rule enabled',
-    misconceptions: { 'Disable the rule': 'det-disable-to-tune', 'Leave it: more alerts means better coverage': 'det-more-alerts-better' },
+    answer: 'Filter that tool narrowly and keep the rule enabled',
+    misconceptions: {
+      'Disable the rule, since almost every alert it raises is noise': 'det-disable-to-tune',
+      'Leave it as it is: more alerts always means better coverage': 'det-more-alerts-better',
+    },
     explanation:
       'Tuning removes the known-benign pattern as precisely as possible, so the two real hits still alert. A filter on the process name alone would let an attacker name their tool the same; combine several fields. Disabling or burying the rule throws away the detection along with the noise.',
   },
@@ -91,13 +99,15 @@ const items = [
     type: 'mc',
     prompt: 'The team says: "We have a rule for T1558.003, so Kerberoasting is covered." What is the best response?',
     choices: [
-      'One rule usually covers one procedure; check variants (AES-only roasting, low-and-slow requests, different tools), log availability on every DC, and test it with an emulation',
-      'Agreed: one rule per technique is full coverage',
-      'Coverage only matters for malware',
+      'One rule covers one procedure; test the variants',
+      'Agreed: one rule per technique means the technique is covered',
+      'Coverage only matters for malware, not for Kerberos attacks',
       'Add the same rule twice to be sure',
     ],
-    answer: 'One rule usually covers one procedure; check variants (AES-only roasting, low-and-slow requests, different tools), log availability on every DC, and test it with an emulation',
-    misconceptions: { 'Agreed: one rule per technique is full coverage': 'det-one-rule-covers-technique' },
+    answer: 'One rule covers one procedure; test the variants',
+    misconceptions: {
+      'Agreed: one rule per technique means the technique is covered': 'det-one-rule-covers-technique',
+    },
     explanation:
       'ATT&CK techniques have many procedures. An RC4-only rule misses attackers who request AES tickets, a burst threshold misses one-ticket-an-hour roasting, and DCs without 4769 auditing see nothing. Coverage maps should say "partial" honestly and be validated with tests (e.g. Atomic Red Team T1558.003).',
   },
@@ -107,9 +117,16 @@ const items = [
     difficulty: 1,
     type: 'mc',
     prompt: 'Per the **Pyramid of Pain**, which indicator costs the attacker the most to change when you detect it?',
-    choices: ['TTPs (behaviour)', 'File hashes', 'IP addresses', 'Domain names'],
+    choices: [
+      'TTPs (behaviour)',
+      'File hashes (SHA-256)',
+      'IP addresses',
+      'Domain names',
+    ],
     answer: 'TTPs (behaviour)',
-    misconceptions: { 'File hashes': 'det-one-rule-covers-technique' },
+    misconceptions: {
+      'File hashes (SHA-256)': 'det-one-rule-covers-technique',
+    },
     explanation:
       'Hashes, IPs and domains are trivial to change (recompile, new VPS, new domain). Tools are harder, and behaviour (TTPs: how they dump credentials, move laterally) is hardest. Behavioural detections last longer, though they usually need more tuning.',
   },
@@ -122,13 +139,16 @@ const items = [
     snippet:
       'detection:\n  selection:\n    EventID: 1\n    Image|endswith: \'\\procdump.exe\'\n    CommandLine|contains: \'lsass\'\n  filter_admin:\n    Image|contains: \'Tools\'\n  condition: selection and not filter_admin',
     choices: [
-      'The filter is too broad: any procdump in a path containing "Tools" is excluded, so an attacker who drops it in C:\\Users\\Public\\Tools\\ is invisible',
-      'Nothing: the filter is precise',
-      'Sigma cannot use EventID 1',
-      'The condition should be "selection or filter_admin"',
+      'Too broad: any procdump under a "Tools" path is excluded',
+      'Nothing: the filter is precise and only matches admin tools',
+      'Sigma rules cannot select on Sysmon EventID 1 at all',
+      'The condition should be "selection or filter_admin" instead',
     ],
-    answer: 'The filter is too broad: any procdump in a path containing "Tools" is excluded, so an attacker who drops it in C:\\Users\\Public\\Tools\\ is invisible',
-    misconceptions: { 'Nothing: the filter is precise': 'det-disable-to-tune', 'The condition should be "selection or filter_admin"': 'det-more-alerts-better' },
+    answer: 'Too broad: any procdump under a "Tools" path is excluded',
+    misconceptions: {
+      'Nothing: the filter is precise and only matches admin tools': 'det-disable-to-tune',
+      'The condition should be "selection or filter_admin" instead': 'det-more-alerts-better',
+    },
     explanation:
       'Exclusions are attack surface. Anchor them tightly: an exact full path in a protected directory, a specific user or host, a signer, ideally several at once. Review exclusions regularly and test that the malicious variant still fires.',
   },
@@ -172,13 +192,16 @@ const items = [
     type: 'mc',
     prompt: 'Before writing a rule for AS-REP roasting, what should you check first?',
     choices: [
-      'That the required log (4768 with pre-authentication type on every DC) is actually collected in the SIEM',
+      'That 4768 events with pre-auth type are collected',
       'That the rule has a catchy name',
-      'That it produces as many alerts as possible',
-      'That the attacker uses a specific IP',
+      'That the rule produces as many alerts as possible from day one',
+      'That the attacker always uses one specific source IP address',
     ],
-    answer: 'That the required log (4768 with pre-authentication type on every DC) is actually collected in the SIEM',
-    misconceptions: { 'That it produces as many alerts as possible': 'det-more-alerts-better', 'That the attacker uses a specific IP': 'det-one-rule-covers-technique' },
+    answer: 'That 4768 events with pre-auth type are collected',
+    misconceptions: {
+      'That the rule produces as many alerts as possible from day one': 'det-more-alerts-better',
+      'That the attacker always uses one specific source IP address': 'det-one-rule-covers-technique',
+    },
     explanation:
       'A rule over logs you do not collect never fires, and nobody notices. Start from the data source: is Kerberos Authentication Service auditing enabled on all DCs, are the events forwarded, and are the fields parsed? ATT&CK lists the data components each technique needs.',
   },
@@ -188,9 +211,16 @@ const items = [
     difficulty: 2,
     type: 'mc',
     prompt: 'Which ATT&CK technique ID should a rule for **Data Encrypted for Impact** (ransomware encryption) carry?',
-    choices: ['T1486', 'T1566', 'T1059.001', 'T1078.004'],
+    choices: [
+      'T1486',
+      'T1566',
+      'T1490',
+      'T1485',
+    ],
     answer: 'T1486',
-    misconceptions: { 'T1566': 'det-one-rule-covers-technique' },
+    misconceptions: {
+      'T1566': 'det-one-rule-covers-technique',
+    },
     explanation:
       'T1486 is Data Encrypted for Impact. Others you meet in Level 3: T1558.003 Kerberoasting, T1558.004 AS-REP roasting, T1558.001 golden ticket, T1550.002 pass-the-hash, T1003.006 DCSync, T1078.004 cloud accounts, T1490 Inhibit System Recovery. T1566 is phishing and T1059.001 PowerShell.',
   },

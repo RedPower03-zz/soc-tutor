@@ -19,7 +19,7 @@ export const L3_SKILLS = [
     level: 3,
     order: 30,
     prereqs: ['net-http'],
-    summary: 'X.509 fields, chains of trust, what validation proves, and certificates as evidence (self-signed C2, CT logs, JA3).',
+    summary: 'X.509 fields, chains of trust, what validation proves, and certificates as evidence (self-signed C2, CT logs, JA3/JA4).',
   },
   {
     id: 'l3-crypto',

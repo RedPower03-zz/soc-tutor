@@ -35,13 +35,16 @@ const items = [
     snippet:
       'EventID 4769  A Kerberos service ticket was requested.\n  Account Name:          j.moreno@CORP.EXAMPLE\n  Service Name:          svc_backup\n  Client Address:        ::ffff:10.20.4.31\n  Ticket Options:        0x40810000\n  Ticket Encryption Type: 0x17\n  Failure Code:          0x0',
     choices: [
-      'A standard user requested an RC4-encrypted (0x17) service ticket for a service account, which is the pattern of Kerberoasting',
-      'It is a failed logon',
-      'It shows a golden ticket',
-      'Nothing: 0x17 is AES-256, the modern default',
+      'A user requested an RC4 service ticket: Kerberoasting',
+      'It is a failed logon for j.moreno because the password was mistyped',
+      'It shows a golden ticket being used against the svc_backup service',
+      'Nothing: 0x17 is AES-256, the default',
     ],
-    answer: 'A standard user requested an RC4-encrypted (0x17) service ticket for a service account, which is the pattern of Kerberoasting',
-    misconceptions: { 'It shows a golden ticket': 'id-golden-vs-silver', 'It is a failed logon': 'id-4768-vs-4769' },
+    answer: 'A user requested an RC4 service ticket: Kerberoasting',
+    misconceptions: {
+      'It shows a golden ticket being used against the svc_backup service': 'id-golden-vs-silver',
+      'It is a failed logon for j.moreno because the password was mistyped': 'id-4768-vs-4769',
+    },
     explanation:
       'Service tickets are encrypted with the service account\'s key. Asking for **RC4 (0x17)** instead of AES (0x12 = AES256, 0x11 = AES128) makes offline cracking of that ticket much faster. Kerberoasting (T1558.003) needs only a normal domain account; the tell is RC4 requests for many or unusual SPNs from one client.',
   },
@@ -52,13 +55,16 @@ const items = [
     type: 'mc',
     prompt: 'What privilege does an attacker need to Kerberoast a service account?',
     choices: [
-      'Any authenticated domain user can request service tickets for any SPN',
-      'Domain Admin',
-      'Local administrator on the domain controller',
-      'The krbtgt hash',
+      'Any authenticated domain user',
+      'Membership of Domain Admins',
+      'Local admin on a domain controller',
+      'The krbtgt account\'s password hash',
     ],
-    answer: 'Any authenticated domain user can request service tickets for any SPN',
-    misconceptions: { 'Domain Admin': 'id-kerberoast-needs-admin', 'Local administrator on the domain controller': 'id-kerberoast-needs-admin' },
+    answer: 'Any authenticated domain user',
+    misconceptions: {
+      'Membership of Domain Admins': 'id-kerberoast-needs-admin',
+      'Local admin on a domain controller': 'id-kerberoast-needs-admin',
+    },
     explanation:
       'Requesting a ticket is normal Kerberos behaviour, so one phished user is enough. The attack happens offline: crack the ticket to recover the service account password. Defences: long random (managed, gMSA) service account passwords, AES-only accounts, and detections on RC4 4769 bursts.',
   },
@@ -82,13 +88,16 @@ const items = [
     type: 'mc',
     prompt: 'What does an attacker need for **pass-the-hash** against a Windows server?',
     choices: [
-      'The account\'s NTLM hash; the plaintext password is not needed',
-      'The plaintext password',
-      'The krbtgt hash',
-      'Physical access to the server',
+      'The account\'s NTLM hash, not the password',
+      'The account\'s plaintext password, typed in',
+      'The krbtgt account\'s hash from the domain',
+      'Physical access to the server\'s console',
     ],
-    answer: 'The account\'s NTLM hash; the plaintext password is not needed',
-    misconceptions: { 'The plaintext password': 'id-pth-needs-password', 'The krbtgt hash': 'id-golden-vs-silver' },
+    answer: 'The account\'s NTLM hash, not the password',
+    misconceptions: {
+      'The account\'s plaintext password, typed in': 'id-pth-needs-password',
+      'The krbtgt account\'s hash from the domain': 'id-golden-vs-silver',
+    },
     explanation:
       'NTLM challenge-response uses the hash as the secret, so a hash dumped from LSASS on one host logs on elsewhere (T1550.002). Evidence: 4624 logon type 3 with NTLM authentication from an unusual source, often a local admin account reused across machines. LAPS (unique local admin passwords) and Credential Guard reduce it.',
   },
@@ -120,9 +129,16 @@ const items = [
     difficulty: 3,
     type: 'mc',
     prompt: 'An attacker cracked the password of `svc_sql` and forges tickets for MSSQL on SRV-DB01 only. The DC logs nothing. What is this?',
-    choices: ['A silver ticket', 'A golden ticket', 'AS-REP roasting', 'Password spraying'],
+    choices: [
+      'A silver ticket',
+      'A golden ticket',
+      'AS-REP roasting',
+      'Password spraying',
+    ],
     answer: 'A silver ticket',
-    misconceptions: { 'A golden ticket': 'id-golden-vs-silver' },
+    misconceptions: {
+      'A golden ticket': 'id-golden-vs-silver',
+    },
     explanation:
       'A **silver ticket** is a service ticket forged with the service account\'s key. The service accepts it without asking the DC, so there is no 4768/4769; only the target\'s own logs (4624 on SRV-DB01) show the logon. Scope is one service rather than the whole domain, but detection is harder. PAC validation and AES-only service accounts help.',
   },
@@ -133,13 +149,15 @@ const items = [
     type: 'mc',
     prompt: 'Event 4672 "Special privileges assigned to new logon" appears right after a 4624. What does it tell you?',
     choices: [
-      'The account that just logged on holds administrator-level privileges (e.g. SeDebugPrivilege)',
-      'The logon failed',
-      'A Kerberos ticket was requested',
-      'The user changed their password',
+      'The new logon holds admin-level rights',
+      'The logon attempt failed and was rejected',
+      'A Kerberos service ticket was requested',
+      'The user changed their password just now',
     ],
-    answer: 'The account that just logged on holds administrator-level privileges (e.g. SeDebugPrivilege)',
-    misconceptions: { 'A Kerberos ticket was requested': 'id-4768-vs-4769' },
+    answer: 'The new logon holds admin-level rights',
+    misconceptions: {
+      'A Kerberos service ticket was requested': 'id-4768-vs-4769',
+    },
     explanation:
       '4672 marks privileged logons. Pair it with 4624 on the Logon ID: an admin account logging on to a workstation it never uses, or a 4672 for an account that should not be privileged, is worth a look. Tier 0 accounts should only ever log on to Tier 0 systems.',
   },
@@ -152,13 +170,15 @@ const items = [
     snippet:
       'EventID 4662  An operation was performed on an object.\n  Subject: Account Name: j.moreno   Logon ID: 0x3E7A21\n  Object Type: domainDNS\n  Access Mask: 0x100 (Control Access)\n  Properties: {1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}   (DS-Replication-Get-Changes)\n              {1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}   (DS-Replication-Get-Changes-All)',
     choices: [
-      'DCSync: the account is asking the DC to replicate password hashes, including krbtgt',
-      'A normal group policy refresh',
-      'A service ticket request',
-      'The user reset their own password',
+      'DCSync: replicating hashes, including krbtgt',
+      'A normal group policy refresh from the workstation',
+      'A Kerberos service ticket request',
+      'The user resetting their own password in the domain',
     ],
-    answer: 'DCSync: the account is asking the DC to replicate password hashes, including krbtgt',
-    misconceptions: { 'A service ticket request': 'id-4768-vs-4769' },
+    answer: 'DCSync: replicating hashes, including krbtgt',
+    misconceptions: {
+      'A Kerberos service ticket request': 'id-4768-vs-4769',
+    },
     explanation:
       'Only DCs (and a few sync tools) should use the replication rights. A user doing so means DCSync (T1003.006, e.g. mimikatz lsadump::dcsync): the attacker already has a privileged account and is pulling hashes, often krbtgt for a golden ticket. Treat it as domain compromise.',
   },
@@ -202,13 +222,15 @@ const items = [
     type: 'mc',
     prompt: 'What is a **Service Principal Name (SPN)**?',
     choices: [
-      'The identifier Kerberos uses to find which account runs a service, e.g. MSSQLSvc/srv-db01.corp.example:1433',
-      'A user\'s password hash',
-      'The name of a domain controller',
-      'A type of firewall rule',
+      'The name Kerberos maps to the account running a service',
+      'A user\'s password hash as stored in Active Directory',
+      'The DNS name of the domain controller that issues tickets',
+      'A type of firewall rule that allows Kerberos on port 88',
     ],
-    answer: 'The identifier Kerberos uses to find which account runs a service, e.g. MSSQLSvc/srv-db01.corp.example:1433',
-    misconceptions: { 'A user\'s password hash': 'id-kerberoast-needs-admin' },
+    answer: 'The name Kerberos maps to the account running a service',
+    misconceptions: {
+      'A user\'s password hash as stored in Active Directory': 'id-kerberoast-needs-admin',
+    },
     explanation:
       'The KDC looks up the SPN to find the account whose key encrypts the service ticket. User accounts with SPNs (service accounts with human-chosen passwords) are the Kerberoasting targets; any user can list them with an LDAP query (servicePrincipalName=*).',
   },

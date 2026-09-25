@@ -424,7 +424,7 @@ export const HOST_LESSONS = [
         id: 'logon-types',
         heading: 'Logon types',
         body: ['4624 and 4625 include a Logon Type that tells you **how** someone logged on:'],
-        points: ['**2** interactive (at the keyboard).', '**3** network (for example SMB file share access).', '**10** RemoteInteractive (RDP).', '**5** service. **4** batch (scheduled task).'],
+        points: ['**2** interactive (at the keyboard).', '**3** network (for example SMB file share access).', '**10** RemoteInteractive (an RDP desktop session).', '**5** service. **4** batch (scheduled task).', 'RDP catch: with **Network Level Authentication** (the default) the password is checked over the network before any session exists, so **failed** RDP logons log 4625 **type 3**, not 10. The successful session logs 4624 type 10, and event **1149** (TerminalServices-RemoteConnectionManager) records the RDP authentication.'],
       },
       {
         id: 'linux-auth',
@@ -451,12 +451,12 @@ export const HOST_LESSONS = [
         title: 'RDP brute force that succeeded',
         artifactLabel: 'Security log on an internet-facing server',
         artifact:
-          '03:14:02  4625  Account: administrator  Logon Type: 10  Source: 203.0.113.45\n03:14:04  4625  Account: administrator  Logon Type: 10  Source: 203.0.113.45\n   ... 180 more 4625 events in 9 minutes ...\n03:23:41  4624  Account: administrator  Logon Type: 10  Source: 203.0.113.45\n03:23:41  4672  Special privileges assigned  Account: administrator',
+          'FW-EDGE  ALLOW TCP 203.0.113.45 -> 10.10.20.15:3389\n03:14:02  4625  Account: administrator  Logon Type: 3  Source: 203.0.113.45  (NtLmSsp)\n03:14:04  4625  Account: administrator  Logon Type: 3  Source: 203.0.113.45  (NtLmSsp)\n   ... 180 more 4625 events in 9 minutes ...\n03:23:40  1149  RDP user authentication succeeded  User: administrator  Source: 203.0.113.45\n03:23:41  4624  Account: administrator  Logon Type: 10  Source: 203.0.113.45\n03:23:41  4672  Special privileges assigned  Account: administrator',
         question: 'What happened?',
         steps: [
           '4625 = failed logon. Over 180 failures in 9 minutes from one external IP is automated guessing.',
-          'Logon Type 10 = RemoteInteractive, so the attempts are over RDP.',
-          'At 03:23:41 there is a **4624** (success) for the same account, from the same IP.',
+          'The firewall shows 3389 open to the internet. The failures are Logon Type 3 because Network Level Authentication checks the password before an RDP session exists; that is normal for RDP brute force.',
+          'At 03:23:40 event **1149** records a successful RDP authentication, then **4624 Logon Type 10** (RemoteInteractive = an RDP desktop session) for the same account, from the same IP.',
           '4672 right after means the session got admin-level privileges.',
         ],
         conclusion: 'A successful RDP brute force against the administrator account. Treat it as a compromise: contain the server, reset credentials and review what happened after 03:23.',

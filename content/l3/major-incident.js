@@ -143,7 +143,7 @@ export const MAJOR_INCIDENT = {
           ],
           answer: 'Destroy the off-site backups before the ransomware runs; Object Lock blocked the deletions and an SCP blocked StopLogging',
           explanation:
-            'Lifecycle expiry plus mass deletes on the backup bucket, then trying to stop logging: this is inhibiting recovery (T1490) and evading defences (T1562.008). Object Lock in compliance mode and the organisation SCP held. But the 1-day lifecycle rule (c4) is still in place, so objects will expire once their lock periods end, and it must be reverted.',
+            'Lifecycle expiry plus mass deletes on the backup bucket, then trying to stop logging: this is inhibiting recovery (T1490) and impairing defences (T1685.002 Disable or Modify Cloud Log, Defense Impairment; formerly T1562.008). Object Lock in compliance mode and the organisation SCP held. But the 1-day lifecycle rule (c4) is still in place, so objects will expire once their lock periods end, and it must be reverted.',
         },
         {
           id: 'mi2-q3',

@@ -12,13 +12,15 @@ const items = [
     type: 'mc',
     prompt: 'Under the **shared responsibility model**, who is responsible for an S3 bucket that a customer made public by mistake?',
     choices: [
-      'The customer: configuration, identities and data are the customer\'s side',
-      'The cloud provider, because it runs the storage',
+      'The customer: settings, identities and data',
+      'The cloud provider, because it runs the storage service',
       'Nobody: public buckets are a feature',
-      'The internet service provider',
+      'The internet service provider that carried the traffic',
     ],
-    answer: 'The customer: configuration, identities and data are the customer\'s side',
-    misconceptions: { 'The cloud provider, because it runs the storage': 'cloud-provider-secures-all' },
+    answer: 'The customer: settings, identities and data',
+    misconceptions: {
+      'The cloud provider, because it runs the storage service': 'cloud-provider-secures-all',
+    },
     explanation:
       'The provider secures the cloud itself (data centres, hardware, hypervisors, the managed service software). The customer secures what they put **in** it: IAM, configuration, network exposure, data classification and, for VMs, the operating system. Most cloud breaches are customer-side misconfigurations or stolen credentials.',
   },
@@ -42,13 +44,15 @@ const items = [
     snippet:
       '{\n  "eventTime": "2026-09-24T02:47:19Z",\n  "eventSource": "sts.amazonaws.com",\n  "eventName": "GetCallerIdentity",\n  "sourceIPAddress": "198.51.100.23",\n  "userAgent": "aws-cli/2.17.4 md/Botocore#1.34 os/linux",\n  "userIdentity": {\n    "type": "IAMUser",\n    "userName": "ci-deploy",\n    "accessKeyId": "AKIAIOSFODNN7EXAMPLE"\n  },\n  "errorCode": null\n}',
     choices: [
-      'Someone is using ci-deploy\'s long-term access key (AKIA) from an unfamiliar IP to check whose key it is, a typical first step after a key leaks',
-      'A failed login to the AWS console',
-      'A harmless health check that never needs review',
+      'ci-deploy\'s long-term key checking whose key it is',
+      'A failed login to the AWS web console by the ci-deploy user',
+      'A harmless automated health check that never needs any review',
       'Someone reading an S3 object',
     ],
-    answer: 'Someone is using ci-deploy\'s long-term access key (AKIA) from an unfamiliar IP to check whose key it is, a typical first step after a key leaks',
-    misconceptions: { 'A harmless health check that never needs review': 'cloud-keys-like-passwords' },
+    answer: 'ci-deploy\'s long-term key checking whose key it is',
+    misconceptions: {
+      'A harmless automated health check that never needs any review': 'cloud-keys-like-passwords',
+    },
     explanation:
       'GetCallerIdentity is the cloud equivalent of `whoami`: attackers call it first to learn which account and identity a stolen key belongs to. Keys starting **AKIA** are long-term IAM user keys; **ASIA** keys are temporary STS credentials. A CI key used from a laptop CLI at 02:47 from a new IP deserves an immediate check with the key owner.',
   },
@@ -59,15 +63,15 @@ const items = [
     type: 'mc',
     prompt: 'A developer accidentally pushed an AWS access key to a public GitHub repository and deleted the commit ten minutes later. What must happen?',
     choices: [
-      'Deactivate and rotate the key immediately and review CloudTrail for its use; public repos are scraped for keys within minutes',
-      'Nothing: the commit was deleted',
-      'Change the developer\'s console password',
+      'Deactivate and rotate the key now; review CloudTrail',
+      'Nothing: the commit was deleted within ten minutes, so it is gone',
+      'Change the developer\'s console password and enforce MFA on it',
       'Make the repository private',
     ],
-    answer: 'Deactivate and rotate the key immediately and review CloudTrail for its use; public repos are scraped for keys within minutes',
+    answer: 'Deactivate and rotate the key now; review CloudTrail',
     misconceptions: {
-      'Nothing: the commit was deleted': 'cloud-keys-like-passwords',
-      'Change the developer\'s console password': 'cloud-keys-like-passwords',
+      'Nothing: the commit was deleted within ten minutes, so it is gone': 'cloud-keys-like-passwords',
+      'Change the developer\'s console password and enforce MFA on it': 'cloud-keys-like-passwords',
     },
     explanation:
       'Access keys are bearer credentials: whoever holds them is that identity, with no MFA prompt. Bots watch public commits and try new keys within minutes, and the key survives in forks, clones and history. Rotating the console password does nothing to the key. Prefer short-lived credentials (roles, OIDC federation for CI) so there is no long-term key to leak.',
@@ -87,7 +91,7 @@ const items = [
     ],
     answer: ['CreateUser followed by CreateAccessKey for the new user', 'AttachUserPolicy with AdministratorAccess', 'StopLogging or DeleteTrail'],
     explanation:
-      'Persistence (a new user with its own key), privilege escalation (admin policy) and defence evasion (turning off CloudTrail) are classic post-compromise steps. Reads within the identity\'s normal job are expected. GuardDuty and most SIEM content alert on StopLogging/DeleteTrail as high severity.',
+      'Persistence (a new user with its own key), privilege escalation (admin policy) and defense impairment (turning off CloudTrail: ATT&CK v19 T1685.002 Disable or Modify Cloud Log) are classic post-compromise steps. Reads within the identity\'s normal job are expected. GuardDuty and most SIEM content alert on StopLogging/DeleteTrail as high severity.',
   },
   {
     id: 'cl-06',
@@ -96,13 +100,16 @@ const items = [
     type: 'mc',
     prompt: 'A storage bucket is encrypted at rest with provider-managed keys and its policy grants `"Principal": "*"` read access. Is the data protected?',
     choices: [
-      'No: encryption at rest is transparent to anyone the policy allows, so the data is public',
-      'Yes: the data is encrypted',
-      'Yes, as long as nobody knows the bucket name',
-      'Only if the bucket is in Europe',
+      'No: anyone the policy allows reads it decrypted',
+      'Yes: the data is encrypted, so nobody can read it',
+      'Yes, as long as nobody learns the bucket\'s name',
+      'Only if the bucket is hosted in a European region',
     ],
-    answer: 'No: encryption at rest is transparent to anyone the policy allows, so the data is public',
-    misconceptions: { 'Yes: the data is encrypted': 'cloud-encrypted-bucket-safe', 'Yes, as long as nobody knows the bucket name': 'cloud-encrypted-bucket-safe' },
+    answer: 'No: anyone the policy allows reads it decrypted',
+    misconceptions: {
+      'Yes: the data is encrypted, so nobody can read it': 'cloud-encrypted-bucket-safe',
+      'Yes, as long as nobody learns the bucket\'s name': 'cloud-encrypted-bucket-safe',
+    },
     explanation:
       'Server-side encryption protects against someone stealing disks from the data centre. The service decrypts automatically for every authorised request, and `Principal: *` authorises everyone. Access control (policies, Block Public Access) is what protects the data. Bucket names are guessable and are scanned constantly.',
   },
@@ -126,13 +133,15 @@ const items = [
     snippet:
       '02:51:03 s3.amazonaws.com DeletePublicAccessBlock  bucket=finance-exports-111122223333  user=ci-deploy  src=198.51.100.23\n02:51:09 s3.amazonaws.com PutBucketPolicy          bucket=finance-exports-111122223333  user=ci-deploy  src=198.51.100.23\n         policy: {"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::finance-exports-111122223333/*"}\n02:53:40 s3.amazonaws.com GetObject (data event) x 4,812  src=203.0.113.77',
     choices: [
-      'Exfiltrate data: remove the public access guard, make the bucket world-readable, then download the objects from another IP',
-      'Encrypt the bucket for ransom',
-      'Normal CI behaviour during a deployment',
-      'Rotate the access key',
+      'Exfiltration: open the bucket, then read it elsewhere',
+      'Ransom: encrypt the bucket\'s objects with an attacker-held key',
+      'Normal CI publishing build exports',
+      'Key rotation: ci-deploy is replacing its own access key safely',
     ],
-    answer: 'Exfiltrate data: remove the public access guard, make the bucket world-readable, then download the objects from another IP',
-    misconceptions: { 'Normal CI behaviour during a deployment': 'cloud-encrypted-bucket-safe' },
+    answer: 'Exfiltration: open the bucket, then read it elsewhere',
+    misconceptions: {
+      'Normal CI publishing build exports': 'cloud-encrypted-bucket-safe',
+    },
     explanation:
       'Block Public Access overrides public policies, so the attacker deletes it first, then adds a `Principal: *` policy and downloads 4,812 objects anonymously (T1530). Contain: restore Block Public Access, remove the policy, deactivate the ci-deploy key. You only see the GetObject calls if S3 data events were logged, which is a common blind spot.',
   },
@@ -143,13 +152,15 @@ const items = [
     type: 'mc',
     prompt: 'A web app on a cloud VM has an SSRF bug. Proxy logs show a request to `http://169.254.169.254/latest/meta-data/iam/security-credentials/app-role`. Why is this serious?',
     choices: [
-      'It is the instance metadata service; it returns the VM role\'s temporary credentials, which the attacker can use from anywhere until they expire',
-      'It is a harmless local link address',
-      'It only reveals the VM\'s hostname',
-      'It shuts the VM down',
+      'The metadata service hands out the role\'s temporary keys',
+      'It is a harmless link-local address that never leaves the VM',
+      'It only reveals the VM\'s host name and its region to the caller',
+      'It is the hypervisor\'s shutdown API, so it turns the VM off',
     ],
-    answer: 'It is the instance metadata service; it returns the VM role\'s temporary credentials, which the attacker can use from anywhere until they expire',
-    misconceptions: { 'It is a harmless local link address': 'cloud-provider-secures-all' },
+    answer: 'The metadata service hands out the role\'s temporary keys',
+    misconceptions: {
+      'It is a harmless link-local address that never leaves the VM': 'cloud-provider-secures-all',
+    },
     explanation:
       'The metadata endpoint hands out the attached role\'s ASIA credentials (T1552.005). The 2019 Capital One breach worked this way. IMDSv2 requires a session token obtained with a PUT request, which most SSRF bugs cannot send; enforcing IMDSv2 and least-privilege roles is the customer\'s job under shared responsibility.',
   },
@@ -181,9 +192,16 @@ const items = [
     difficulty: 1,
     type: 'mc',
     prompt: 'Which CloudTrail field tells you whether an API call **succeeded**?',
-    choices: ['errorCode (absent or null on success, e.g. AccessDenied on failure)', 'eventTime', 'userAgent', 'awsRegion'],
-    answer: 'errorCode (absent or null on success, e.g. AccessDenied on failure)',
-    misconceptions: { userAgent: 'cloud-keys-like-passwords' },
+    choices: [
+      'errorCode',
+      'eventTime',
+      'userAgent',
+      'responseElements',
+    ],
+    answer: 'errorCode',
+    misconceptions: {
+      'userAgent': 'cloud-keys-like-passwords',
+    },
     explanation:
       'CloudTrail logs attempts, not just successes. A burst of `AccessDenied` errors shows someone probing what a key may do (enumeration); the first call without an errorCode shows what they actually achieved. Always filter on errorCode before concluding what happened.',
   },
@@ -196,7 +214,7 @@ const items = [
     accept: ['stoplogging', 'stop logging'],
     misconceptions: { deletetrail: 'cloud-provider-secures-all', getcalleridentity: 'cloud-keys-like-passwords' },
     explanation:
-      '**StopLogging** pauses a trail (DeleteTrail removes it). Both are defence evasion (T1562.008, Disable or Modify Cloud Logs). Organisation trails that member accounts cannot change, delivery to a separate log archive account, and an alert on these events protect your evidence.',
+      '**StopLogging** pauses a trail (DeleteTrail removes it). Both map to **T1685.002 Disable or Modify Cloud Log** under the **Defense Impairment** tactic (ATT&CK v19; this was T1562.008 under Defense Evasion before v19 revoked it). Organisation trails that member accounts cannot change, delivery to a separate log archive account, and an alert on these events protect your evidence.',
   },
 ];
 
@@ -222,7 +240,7 @@ const lesson = {
       points: [
         '**Long-term keys** (AWS access keys starting **AKIA**) belong to IAM users and work until deleted. They are bearer credentials: no MFA prompt, and usable from anywhere.',
         '**Temporary credentials** (**ASIA**, plus a session token) come from STS when a role is assumed or a user federates; they expire.',
-        'Stolen-key playbook: GetCallerIdentity (whoami), enumeration (List*, many AccessDenied errors), escalation (AttachUserPolicy, CreateAccessKey for another user), persistence (CreateUser, new keys), evasion (StopLogging), then the objective (data, crypto-mining instances).',
+        'Stolen-key playbook: GetCallerIdentity (whoami), enumeration (List*, many AccessDenied errors), escalation (AttachUserPolicy, CreateAccessKey for another user), persistence (CreateUser, new keys), defense impairment (StopLogging), then the objective (data, crypto-mining instances).',
       ],
     },
     {
