@@ -5,6 +5,8 @@ import * as G from './game.js';
 import * as S from './scheduler.js';
 import { loadState, saveState, clearState, newState } from './storage.js';
 import { icon } from './icons.js';
+import { rankInsignia } from './insignia.js';
+import * as OPS from './ops-ui.js';
 
 const app = document.getElementById('app');
 const idx = E.indexContent(CONTENT);
@@ -97,9 +99,9 @@ const EVENT = {
   misconception: ['Myth', 'crit'],
   'misconception-resolved': ['Busted', 'ok'],
 };
-const TRACK_ICON = { host: 'host', network: 'network', soc: 'radar' };
-const TRACK_CODE = { host: 'HST', network: 'NET', soc: 'SOC' };
-const TRACK_LABEL = { soc: 'Level 2+ roadmap' }; // shorter heading for the phone layout
+const TRACK_ICON = { host: 'host', network: 'network', soc: 'radar', advanced: 'layers' };
+const TRACK_CODE = { host: 'HST', network: 'NET', soc: 'SOC', advanced: 'ADV' };
+const TRACK_LABEL = { soc: 'Level 2 · SOC operations', advanced: 'Level 3 · Advanced' }; // shorter headings for the phone layout
 
 // Short codes like HST-01 / NET-03 for the skill map.
 const SKILL_CODE = {};
@@ -169,25 +171,6 @@ function applyTheme() {
   document.documentElement.dataset.theme = state.game.theme || 'cyan';
 }
 
-/** Rank insignia: one chevron per rank up to four, plus a star for the specialist ranks. */
-function rankInsignia(ri, cls = '') {
-  const chevrons = ri >= 4 ? 3 : ri + 1;
-  const star = ri >= 4;
-  let paths = '';
-  for (let i = 0; i < chevrons; i++) {
-    const y = 30 - i * 6;
-    paths += `<path d="M5 ${y} L16 ${y - 6} L27 ${y}"/>`;
-  }
-  if (star) {
-    const n = ri - 3; // 1..3 stars for responder/hunter/lead
-    for (let i = 0; i < n; i++) {
-      const cx = 16 + (i - (n - 1) / 2) * 8;
-      paths += `<path class="star" d="M${cx} 1.5 l1.6 3.3 3.6.5-2.6 2.5.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z"/>`;
-    }
-  }
-  return `<svg class="insignia ${cls}" viewBox="0 0 32 34" aria-hidden="true">${paths}</svg>`;
-}
-
 function levelProgress(game) {
   const lo = G.levelThreshold(game.level);
   const hi = G.levelThreshold(game.level + 1);
@@ -198,10 +181,6 @@ function operatorPanel({ withButton = true } = {}) {
   const g = state.game;
   const ri = G.rankIndex(g.rankId);
   const lp = levelProgress(g);
-  const next = G.RANKS[ri + 1];
-  const nextTxt = next
-    ? `Next rank: <b>${esc(next.title)}</b> at ${next.xp.toLocaleString('en-US')} XP${next.gate ? ` ${esc(G.gateText(next, CONTENT))}` : ''}`
-    : 'Top of the ladder.';
   const s = g.streak;
   const studiedToday = s.lastDay === G.dayKey(Date.now());
   const earned = Object.keys(g.badges).length;
@@ -220,16 +199,17 @@ function operatorPanel({ withButton = true } = {}) {
         <div class="op-level"><b class="readout">${pad(g.level)}</b><span class="label">Level</span></div>
       </div>
       <div class="xpbar-wrap">
-        <div class="label row"><span>XP <b class="mono accent-text">${g.xp.toLocaleString('en-US')}</b></span><span class="mono">${lp.into}/${lp.span} to LVL ${pad(g.level + 1)}</span></div>
-        <div class="xpbar" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="${lp.span}" aria-valuenow="${lp.into}"><span style="width:${Math.max(2, Math.round(lp.frac * 100))}%"></span></div>
-        <p class="op-next small muted">${nextTxt}</p>
+        <div class="label row"><span>XP <b class="mono accent-text">${g.xp.toLocaleString('en-US')}</b></span><span class="mono">${g.level >= G.MAX_LEVEL ? 'Max level' : `${lp.into.toLocaleString('en-US')}/${lp.span.toLocaleString('en-US')} to LVL ${pad(g.level + 1)}`}</span></div>
+        <div class="xpbar" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="${lp.span}" aria-valuenow="${lp.into}"><span style="width:${Math.max(2, Math.round(Math.min(1, lp.frac) * 100))}%"></span></div>
       </div>
+      <div class="op-ladder">${OPS.ladderStrip()}</div>
+      ${OPS.nextRankBlock(true)}
       <div class="op-stats">
         <div class="op-stat">${icon('flame')}<span><b class="mono">${s.current}</b> day streak${studiedToday ? '' : '<em> · study today to extend</em>'}</span></div>
         <div class="op-stat">${icon('shield')}<span><b class="mono">${s.freezes}</b> grace day${s.freezes === 1 ? '' : 's'}</span></div>
         <div class="op-stat">${icon('award')}<span><b class="mono">${earned}</b>/${G.BADGES.length} badges</span></div>
       </div>
-      ${withButton ? `<button class="btn secondary" data-action="profile">${icon('award')}Profile &amp; badges</button>` : ''}`,
+      ${withButton ? `<div class="btn-row"><button class="btn secondary" data-action="career">${icon('ladder')}Career ladder</button><button class="btn secondary" data-action="profile">${icon('award')}Profile</button></div>` : `<button class="btn secondary" data-action="career">${icon('ladder')}Career ladder</button>`}`,
   });
 }
 
@@ -269,27 +249,12 @@ function renderProfile() {
       </li>`;
   };
 
-  const ladder = G.RANKS.map((r, i) => {
-    const state_ = i < ri ? 'done' : i === ri ? 'current' : 'locked';
-    const gate = r.gate ? G.gateText(r, CONTENT) : '';
-    const xpFrac = Math.min(1, g.xp / r.xp || 0);
-    return `<li class="rung ${state_}">
-        <span class="rung-ins">${rankInsignia(i, 'sm')}</span>
-        <span class="rung-main">
-          <span class="rung-top"><span class="rung-name">${esc(r.title)}</span>${
-            state_ === 'current' ? chip(['Current', 'info']) : state_ === 'done' ? chip(['Achieved', 'ok']) : chip(['Locked', 'dim'])
-          }</span>
-          <span class="rung-req small">${r.xp ? `${r.xp.toLocaleString('en-US')} XP` : 'Starting rank'}${gate ? ` ${esc(gate)}` : ''}</span>
-          ${i === ri + 1 ? `<span class="rung-bar">${bar(xpFrac)}<span class="mono small">${g.xp.toLocaleString('en-US')}/${r.xp.toLocaleString('en-US')}</span></span>` : ''}
-        </span>
-        ${state_ === 'locked' ? `<span class="rung-lock">${icon('lock')}</span>` : ''}
-      </li>`;
-  }).join('');
-
   const titles = G.availableTitles(g);
   const equipped = g.equippedTitle;
+  const moreRanks = Math.max(0, G.RANKS.length - ri - 1 - 3);
   const lockedTitles = [
-    ...G.RANKS.slice(ri + 1).map((r) => ({ title: r.title, source: `Reach ${r.title}` })),
+    ...G.RANKS.slice(ri + 1, ri + 4).map((r) => ({ title: r.title, source: `Reach ${r.title}` })),
+    ...(moreRanks ? [{ title: `+${moreRanks} more ranks`, source: 'See the career ladder' }] : []),
     ...G.BADGES.filter((b) => b.title && !g.badges[b.id] && !b.hidden).map((b) => ({ title: b.title, source: `Earn ${b.name}` })),
   ];
   const titleRows = `<ul class="titles">
@@ -325,7 +290,7 @@ function renderProfile() {
   });
 
   const xpTable = `<table class="xptable"><thead><tr><th>Action</th><th>XP</th></tr></thead><tbody>${G.XP_TABLE.map(([a, v]) => `<tr><td>${esc(a)}</td><td class="mono">${esc(v)}</td></tr>`).join('')}</tbody></table>
-    <p class="small muted">XP rewards effort and learning, not volume: wrong answers still earn a little, XP is never taken away, and grinding easy questions in a skill you've mastered earns nothing. Levels: level N starts at 50×N×(N−1) XP.</p>`;
+    <p class="small muted">XP rewards effort and learning, not volume: wrong answers still earn a little, XP is never taken away, and grinding easy questions in a skill you've mastered earns nothing. Levels: level N starts at 10×(N−1)<sup>2.25</sup> XP (level 10 = 1,400, level 20 = 7,535), up to level ${G.MAX_LEVEL}.</p>`;
 
   render(`
     ${statusBar()}
@@ -345,7 +310,6 @@ function renderProfile() {
         <ul class="badge-grid">${locked.map(badgeCard).join('')}</ul>`,
     })}
     ${streakPanel}
-    ${panel({ title: 'Career ladder', icon: 'chart', meta: `${ri + 1}/${G.RANKS.length}`, cls: 'ladder-panel', body: `<ol class="ladder">${ladder}</ol><p class="small muted">Higher ranks need mastery as well as XP. Incident Responder and above unlock with the Level 2+ modules and the capstone.</p>` })}
     ${panel({ title: 'Titles', icon: 'tag', meta: `${titles.length} unlocked`, body: `<p class="small muted">Equip a title to show it on your operator card.</p>${titleRows}` })}
     ${panel({ title: 'Console theme', icon: 'palette', meta: `${unlocked.size}/${G.THEMES.length}`, body: `<p class="small muted">Accent palettes unlock as you rank up.</p>${themes}` })}
     ${panel({ title: 'How XP works', icon: 'list', body: xpTable })}
@@ -533,10 +497,11 @@ function renderHome() {
   render(`
     ${statusBar()}
     ${welcome}
+    ${OPS.ladderNoticeBanner()}
     ${focusBanner}
     ${firstVisit ? '' : operatorPanel()}
     ${hero}
-    ${firstVisit ? '' : operationsPanel()}
+    ${firstVisit ? '' : OPS.operationsPanel()}
     ${panel({ title: 'Skill map', icon: 'grid', meta: 'Tap a skill to drill it', cls: 'skillmap', body: tracks })}
     <footer class="footer">
       <p>Progress is saved in this browser on this device.</p>
@@ -582,33 +547,6 @@ function nextDueText() {
   if (days <= 0) return 'Next review: later today.';
   if (days === 1) return 'Next review: tomorrow.';
   return `Next review: in ${days} days (${new Date(next).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}).`;
-}
-
-/** Navigation slot for practice modes and scenario content (mixed practice now; SIEM mode and capstone later). */
-function operationsPanel() {
-  const learned = E.learnedSkills(state, CONTENT);
-  const minL = E.PARAMS.interleaveMinLearned;
-  const rows = CONTENT.scenarios
-    .map((sc) => {
-      if (sc.kind === 'mixed') {
-        const ok = learned.length >= minL;
-        return `<li class="op-row ${ok ? '' : 'locked'}">
-          <span class="op-ico">${icon('shuffle')}</span>
-          <span class="op-body"><b>${esc(sc.title)}</b><em>${ok ? `Evidence from your ${learned.length} learned skills, shuffled.` : `Unlocks when you have learned ${minL} skills (${learned.length}/${minL}).`}</em></span>
-          <button class="btn mini ${ok ? 'primary' : ''}" data-action="mixed" ${ok ? '' : 'disabled'}>${ok ? 'Start' : icon('lock')}</button>
-        </li>`;
-      }
-      const stages = sc.stages || [];
-      const unlocked = stages.filter((st) => (st.requires?.lessons || []).every((sid) => E.lessonState(state, sid).completed || E.lessonState(state, sid).bypassed)).length;
-      return `<li class="op-row locked">
-          <span class="op-ico">${icon(sc.kind === 'capstone' ? 'flag' : 'search')}</span>
-          <span class="op-body"><b>${esc(sc.title)}</b><em>${esc(sc.summary)}</em>
-            ${stages.length ? `<span class="op-stages">${stages.map((st, i) => `<i class="${i < unlocked ? 'on' : ''}" title="${esc(st.title)}"></i>`).join('')}<span>${unlocked}/${stages.length} stages unlocked by lessons</span></span>` : ''}</span>
-          ${chip(['Round 2', 'dim'])}
-        </li>`;
-    })
-    .join('');
-  return panel({ title: 'Operations', icon: 'target', meta: 'Practice modes', cls: 'ops', body: `<ul class="op-list">${rows}</ul>` });
 }
 
 // ------------------------------------------------------------------ sessions
@@ -1612,8 +1550,35 @@ app.addEventListener('click', (e) => {
       }
       return undefined;
     default:
+      OPS.handleClick(action, el);
       return undefined;
   }
+});
+app.addEventListener('input', OPS.handleInput);
+app.addEventListener('change', OPS.handleInput);
+app.addEventListener('keydown', OPS.handleKey);
+
+OPS.initOps({
+  getState: () => state,
+  save,
+  now,
+  render,
+  statusBar,
+  panel,
+  chip,
+  esc,
+  rich,
+  pad,
+  bar,
+  xpToast,
+  queueAchievements,
+  refreshStatusXp,
+  skillName,
+  setScreen: () => {
+    session = null;
+    current = null;
+    lessonView = null;
+  },
 });
 
 renderHome();

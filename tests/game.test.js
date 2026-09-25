@@ -107,33 +107,46 @@ test('lesson and misconception events use the XP table', () => {
 
 // ------------------------------------------------------------------ levels & ranks
 
-test('levels follow 50·L·(L−1)', () => {
-  assert.deepEqual([1, 2, 3, 4, 5].map(G.levelThreshold), [0, 100, 300, 600, 1000]);
+test('level curve: 10·(L−1)^2.25, fast early levels, capped at MAX_LEVEL', () => {
+  assert.deepEqual([1, 2, 3, 4, 5].map(G.levelThreshold), [0, 10, 50, 120, 225]);
   assert.equal(G.levelForXp(0), 1);
-  assert.equal(G.levelForXp(99), 1);
-  assert.equal(G.levelForXp(100), 2);
-  assert.equal(G.levelForXp(999), 4);
-  assert.equal(G.levelForXp(1000), 5);
+  assert.equal(G.levelForXp(9), 1);
+  assert.equal(G.levelForXp(10), 2);
+  assert.equal(G.levelForXp(224), 4);
+  assert.equal(G.levelForXp(225), 5);
+  assert.equal(G.levelForXp(1e9), G.MAX_LEVEL);
+  for (let L = 2; L <= G.MAX_LEVEL; L++) {
+    assert.ok(G.levelThreshold(L) > G.levelThreshold(L - 1), `level ${L} must cost more than ${L - 1}`);
+    assert.ok(G.levelThreshold(L + 1) - G.levelThreshold(L) >= G.levelThreshold(L) - G.levelThreshold(L - 1), `gap to ${L + 1} shrinks`);
+  }
 });
 
-test('rank ladder: XP thresholds plus mastery gates', () => {
+test('rank ladder: XP thresholds plus data-driven gates (mastery, cases, capstone, tiers)', () => {
   const { st, game } = fresh();
   const rank = () => G.computeRank(game, st, CONTENT).id;
   assert.equal(rank(), 'trainee');
   game.xp = 249;
   assert.equal(rank(), 'trainee');
   game.xp = 250;
-  assert.equal(rank(), 'junior');
+  assert.equal(rank(), 'junior-1');
   game.xp = 1500;
+  assert.equal(rank(), 'junior-1', 'Junior Analyst II needs 2 mastered skills');
   ['host-processes', 'host-users', 'host-filesystem', 'net-osi'].forEach((id) => master(st, id));
-  assert.equal(rank(), 'junior', 'Tier 1 needs 5 mastered skills');
+  assert.equal(rank(), 'junior-2', 'Tier 1 Analyst I needs 5 mastered skills');
   master(st, 'net-ip');
-  assert.equal(rank(), 'tier1');
+  assert.equal(rank(), 'tier1-1');
   game.xp = 99999;
-  assert.equal(rank(), 'tier1', 'Tier 2 needs all of Level 1');
   idx.activeSkills.forEach((s) => master(st, s.id));
-  assert.equal(rank(), 'tier2', 'higher ranks need Level 2+ content that is not built yet');
-  assert.match(G.gateText(G.RANKS.find((r) => r.id === 'responder'), CONTENT), /Level 2\+ content/);
+  assert.equal(rank(), 'tier1-1', 'Tier 1 Analyst II also needs a solved SIEM case');
+  st.siem.cases['siem-rdp-brute'] = { solved: true };
+  assert.equal(rank(), 'tier1-2');
+  st.siem.cases['siem-certutil'] = { solved: true };
+  st.siem.cases['siem-scanner'] = { solved: true };
+  assert.equal(rank(), 'tier1-2', 'Tier 1 Analyst III also needs the First shift capstone');
+  st.capstones['first-shift'] = { completedAt: DAY1 };
+  assert.equal(rank(), 'tier1-3');
+  assert.equal(G.computeRank(game, st, CONTENT).id, G.reachableRank(CONTENT).id, 'nothing above is reachable until Level 2 exists');
+  assert.match(G.gateText(G.RANKS.find((r) => r.id === 'tier2-1'), CONTENT), /Level 2 SOC Operations.*coming soon/);
 });
 
 test('rank-ups are reported once and unlock themes; titles and themes can be equipped only when earned', () => {
@@ -141,20 +154,27 @@ test('rank-ups are reported once and unlock themes; titles and themes can be equ
   assert.equal(G.setTheme(game, 'amber'), false);
   game.xp = 240;
   const r = answer(game, st, itemOf('net-osi', 2, 'mc'), true);
-  assert.equal(r.rankUp?.rank.id, 'junior');
-  assert.deepEqual(r.rankUp.themes.map((t) => t.id), ['amber']);
+  assert.equal(r.rankUp?.rank.id, 'junior-1');
+  assert.deepEqual(r.rankUp.themes, []);
   assert.equal(answer(game, st, itemOf('net-osi', 1, 'mc'), true).rankUp, null);
+  master(st, 'host-processes');
+  master(st, 'host-users');
+  game.xp = 690;
+  const r2 = answer(game, st, itemOf('net-osi', 2, 'mc'), true);
+  assert.equal(r2.rankUp?.rank.id, 'junior-2');
+  assert.deepEqual(r2.rankUp.themes.map((t) => t.id), ['amber']);
   assert.equal(G.setTheme(game, 'amber'), true);
   assert.equal(G.setTheme(game, 'red'), false);
-  assert.equal(G.currentTitle(game), 'Junior Analyst');
-  assert.equal(G.equipTitle(game, 'rank:trainee'), true);
-  assert.equal(G.currentTitle(game), 'Trainee');
+  assert.equal(G.currentTitle(game), 'Junior Analyst II');
+  assert.equal(G.equipTitle(game, 'rank:junior-1'), true);
+  assert.equal(G.currentTitle(game), 'Junior Analyst I');
+  assert.equal(G.equipTitle(game, 'rank:tier1-1'), false, 'rank not reached yet');
   assert.equal(G.equipTitle(game, 'badge:packet-whisperer'), false, 'badge title not earned yet');
 });
 
 test('level-up is reported when crossing a threshold', () => {
   const { st, game } = fresh();
-  game.xp = 95;
+  game.xp = 0;
   game.level = 1;
   const r = answer(game, st, itemOf('net-osi', 2, 'mc'), true);
   assert.deepEqual(r.levelUp, { from: 1, to: 2 });
@@ -162,8 +182,8 @@ test('level-up is reported when crossing a threshold', () => {
 
 // ------------------------------------------------------------------ badges
 
-test('badge catalogue: 20–25 badges with unique ids, descriptions and some secrets', () => {
-  assert.ok(G.BADGES.length >= 20 && G.BADGES.length <= 25, `${G.BADGES.length} badges`);
+test('badge catalogue: 25–35 badges with unique ids, descriptions and some secrets', () => {
+  assert.ok(G.BADGES.length >= 25 && G.BADGES.length <= 35, `${G.BADGES.length} badges`);
   assert.equal(new Set(G.BADGES.map((b) => b.id)).size, G.BADGES.length);
   for (const b of G.BADGES) assert.ok(b.name && b.description && b.icon && typeof b.progress === 'function', b.id);
   assert.ok(G.BADGES.filter((b) => b.hidden).length >= 3);
@@ -391,9 +411,10 @@ test('v1 -> v2 migration grants XP and badges retroactively and is idempotent', 
   assert.equal(copy.game.xp, xp, 'running migration again changes nothing');
 });
 
-test('a brand-new state starts at version 2 with an empty profile', () => {
+test('a brand-new state starts at the current version with an empty profile', () => {
   const st = migrateState(E.createState(CONTENT), CONTENT, DAY1);
-  assert.equal(st.version, 2);
+  assert.equal(st.version, 3);
+  assert.equal(st.game.ladder, 2);
   assert.equal(st.game.xp, 0);
   assert.equal(st.game.rankId, 'trainee');
   assert.deepEqual(st.game.badges, {});

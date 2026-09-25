@@ -419,13 +419,13 @@ test('lessons: gap routing to an unseen prerequisite offers its lesson once', ()
 
 // ------------------------------------------------------------------ migration from a real v1 save
 
-test('migration: a real v1 save from main becomes v2 with schedule, lessons and XP', () => {
+test('migration: a real v1 save from main becomes current with schedule, lessons and XP', () => {
   const raw = fs.readFileSync(new URL('./fixtures/v1-save-from-main.json', import.meta.url), 'utf8');
   const v1 = JSON.parse(raw);
   assert.equal(v1.version, 1);
   const st = migrateState(JSON.parse(raw), CONTENT, T0);
   assert.equal(st.version, CURRENT_VERSION);
-  assert.equal(CURRENT_VERSION, 2);
+  assert.equal(CURRENT_VERSION, 3);
   const attempted = Object.entries(v1.items).filter(([, s]) => s.attempts > 0).map(([id]) => id);
   assert.equal(Object.keys(st.cards).length, attempted.length, 'one long-term card per attempted item');
   for (const q of v1.reviewQueue) assert.ok(st.cards[q.itemId].due <= T0, `${q.itemId} (still in v1 review) should be due today`);

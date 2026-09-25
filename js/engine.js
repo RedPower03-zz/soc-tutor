@@ -193,6 +193,9 @@ export function ensureState(st, content) {
   for (const c of ['guess', 'unsure', 'sure']) st.calibration[c] ??= { n: 0, correct: 0 };
   st.lastInterleave ??= 0;
   st.mixedStats ??= { asked: 0, recognized: 0 };
+  st.siem ??= { cases: {}, active: null }; // SIEM investigations (js/siem.js)
+  st.siem.cases ??= {};
+  st.capstones ??= {}; // capstone scenarios by id (js/capstone.js)
   for (const s of idx.activeSkills) {
     st.skills[s.id] ??= { p: P.pInit, attempts: 0, correct: 0, unlocked: false, lastTurn: 0 };
     st.skills[s.id].lastAt ??= null;

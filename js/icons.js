@@ -37,6 +37,11 @@ const PATHS = {
   shuffle: '<path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4"/><path d="m18 4 3 3-3 3M18 14l3 3-3 3"/>',
   flag: '<path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5.5 5.5"/>',
+  pin: '<path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/>',
+  filter: '<path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  send: '<path d="M3 11.5 21 3l-8.5 18-2-7.5z"/><path d="m10.5 13.5 4-4"/>',
+  ladder: '<path d="M7 2v20M17 2v20M7 6h10M7 11h10M7 16h10"/>',
 };
 
 export function icon(name, cls = '') {

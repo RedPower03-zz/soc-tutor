@@ -12,6 +12,7 @@
 //  * The big rewards are for learning milestones: mastering a skill, closing a root gap,
 //    clearing missed questions, finishing the day's due reviews.
 import * as E from './engine.js';
+import { RANKS as CAREER_RANKS, TIERS as CAREER_TIERS } from '../content/career.js';
 
 // ------------------------------------------------------------------ config
 
@@ -34,6 +35,10 @@ export const XP_RULES = {
   fadedExample: 10, // completed a faded (partly-solved) example yourself
   placementCorrect: 5, // placement check answers (flat, no difficulty scaling)
   placementAttempt: 2,
+  // Operations: XP scales with the investigation score, and replays only pay for improvement.
+  siemCase: { 1: 120, 2: 160, 3: 220 }, // SIEM case at 100% score, by case difficulty
+  capstoneStage: 40, // First shift: each stage at 100%
+  escalation: 300, // First shift: escalation report at 100% of the rubric
   // Diminishing returns for answers in the same skill on the same day
   diminishing: [
     { upTo: 15, factor: 1 },
@@ -56,38 +61,43 @@ export const XP_TABLE = [
   ['Misconception resolved', `+${XP_RULES.misconceptionResolved}`],
   ['Lesson / worked example / faded example', `${XP_RULES.lessonCompleted} / ${XP_RULES.workedExample} / ${XP_RULES.fadedExample}`],
   ['Placement answer: right / wrong', `${XP_RULES.placementCorrect} / ${XP_RULES.placementAttempt}`],
+  ['SIEM case (× your score): easy / medium / hard', `${XP_RULES.siemCase[1]} / ${XP_RULES.siemCase[2]} / ${XP_RULES.siemCase[3]}`],
+  ['First shift: each stage / escalation report (× score)', `${XP_RULES.capstoneStage} / ${XP_RULES.escalation}`],
+  ['Replaying a case or stage', 'only the improvement on your best score'],
   ['Easy question in a skill you already mastered', `${XP_RULES.masteredEasy}`],
   ['Harder question in a mastered skill', `×${XP_RULES.masteredRepeatFactor}`],
   ['Same skill, same day: answers 16–30 / 31+', '×0.5 / ×0.25'],
 ];
 
-/** Level L starts at 50·L·(L−1) XP: L2 = 100, L3 = 300, L4 = 600, L5 = 1000 … */
+/**
+ * Level curve, sized for the whole planned curriculum (Levels 1-3), not just today's content.
+ * Level L starts at 10·(L−1)^2.25 XP (rounded to 5): L2 = 10, L5 = 225, L10 = 1,400,
+ * L20 = 7,525, L40 = 38,190, L60 = 96,440. Early levels come quickly; the cap is MAX_LEVEL.
+ */
+export const MAX_LEVEL = 60;
 export function levelThreshold(level) {
-  return 50 * level * (level - 1);
+  if (level <= 1) return 0;
+  return Math.round((10 * (level - 1) ** 2.25) / 5) * 5;
 }
 export function levelForXp(xp) {
   let L = 1;
-  while (levelThreshold(L + 1) <= xp) L++;
+  while (L < MAX_LEVEL && levelThreshold(L + 1) <= xp) L++;
   return L;
 }
 
-/** SOC career ladder. Higher ranks need mastery gates; the top ones need Level 2+ content. */
-export const RANKS = [
-  { id: 'trainee', title: 'Trainee', xp: 0 },
-  { id: 'junior', title: 'Junior Analyst', xp: 250 },
-  { id: 'tier1', title: 'Tier 1 Analyst', xp: 1000, gate: { mastered: 5 } },
-  { id: 'tier2', title: 'Tier 2 Analyst', xp: 2500, gate: { allLevel1: true } },
-  { id: 'responder', title: 'Incident Responder', xp: 4500, gate: { skills: ['l2-alert-triage', 'l2-ir'] } },
-  { id: 'hunter', title: 'Threat Hunter', xp: 7000, gate: { skills: ['l2-siem', 'l2-hunting'] } },
-  { id: 'lead', title: 'SOC Lead', xp: 10000, gate: { capstone: true } },
-];
+/** SOC career ladder and curriculum tiers: data in content/career.js. */
+export const RANKS = CAREER_RANKS;
+export const TIERS = CAREER_TIERS;
 
-/** Cosmetic accent themes, unlocked by rank. */
+/** Cosmetic accent themes, unlocked by rank (spread across the whole ladder). */
 export const THEMES = [
   { id: 'cyan', name: 'Standard', rank: 'trainee', description: 'Cyan command-center default.' },
-  { id: 'amber', name: 'Night Ops', rank: 'junior', description: 'Amber low-light console.' },
-  { id: 'red', name: 'Incident', rank: 'tier1', description: 'Red-alert incident room.' },
-  { id: 'green', name: 'Terminal', rank: 'tier2', description: 'Old-school green phosphor.' },
+  { id: 'amber', name: 'Night Ops', rank: 'junior-2', description: 'Amber low-light console.' },
+  { id: 'red', name: 'Incident', rank: 'tier1-2', description: 'Red-alert incident room.' },
+  { id: 'green', name: 'Terminal', rank: 'tier2-1', description: 'Old-school green phosphor.' },
+  { id: 'violet', name: 'Deep Hunt', rank: 'senior-2', description: 'Violet threat-hunting console.' },
+  { id: 'ice', name: 'Whiteout', rank: 'detection', description: 'Cold white detection lab.' },
+  { id: 'gold', name: 'Command', rank: 'lead', description: 'Gold SOC-lead command deck.' },
 ];
 
 // ------------------------------------------------------------------ badges
@@ -98,6 +108,7 @@ const masteredIn = (st, content, track) => {
   return { current: skills.filter((s) => E.isMastered(st, content, s.id)).length, target: skills.length };
 };
 const count = (n, target) => ({ current: Math.min(n, target), target });
+const solvedCases = (st, content) => (content.siemCases || []).filter((c) => st.siem?.cases?.[c.id]?.solved).length;
 
 /**
  * Badge definitions. progress(game, st, content) -> { current, target, text? }.
@@ -134,6 +145,12 @@ export const BADGES = [
       return { current: met ? 20 : Math.min(sureTotal, 19), target: 20, text: `${sureTotal} Sure answers · ${Math.round(acc * 100)}% right` };
     },
   },
+  { id: 'case-closed', name: 'Case Closed', icon: 'search', description: 'Solve your first SIEM investigation (right verdict, 60+ score).', progress: (g) => count(g.counters.casesSolved, 1) },
+  { id: 'sharp-eye', name: 'Sharp Eye', icon: 'target', title: 'Sharp Eye', description: 'Pin every key piece of evidence in a case with no noise pins.', progress: (g) => count(g.counters.perfectEvidence, 1) },
+  { id: 'false-alarm', name: 'Not Today', icon: 'shield', description: 'Correctly clear a false or benign alert without escalating it.', progress: (g) => count(g.counters.benignCleared, 1) },
+  { id: 'siem-sleuth', name: 'SIEM Sleuth', icon: 'search', title: 'SIEM Sleuth', description: 'Solve every SIEM investigation case.', progress: (g, st, c) => ({ current: solvedCases(st, c), target: (c.siemCases || []).length || 1 }) },
+  { id: 'shift-complete', name: 'Shift Complete', icon: 'flag', title: 'Night Watch', description: 'Finish the First shift capstone with an escalation report.', progress: (g) => count(g.counters.capstonesDone, 1) },
+  { id: 'clean-handoff', name: 'Clean Handoff', icon: 'check', description: 'Score 85% or more on an escalation report.', progress: (g) => count(g.counters.cleanHandoffs, 1) },
   { id: 'on-watch-1', name: 'On Watch I', icon: 'flame', description: 'Study 3 days in a row.', progress: (g) => count(g.streak.best, 3) },
   { id: 'on-watch-2', name: 'On Watch II', icon: 'flame', description: 'Study 7 days in a row.', progress: (g) => count(g.streak.best, 7) },
   { id: 'on-watch-3', name: 'On Watch III', icon: 'flame', title: 'Watch Commander', description: 'Study 30 days in a row.', progress: (g) => count(g.streak.best, 30) },
@@ -149,7 +166,8 @@ export const BADGES = [
 
 export function createGame() {
   return {
-    version: 1,
+    version: 3,
+    ladder: 2, // career ladder version: 1 = original 7 ranks (v2 saves), 2 = 16-rank ladder in content/career.js
     xp: 0,
     level: 1,
     rankId: 'trainee',
@@ -182,7 +200,16 @@ export function createGame() {
       nightShift: 0,
       earlyBird: 0,
       placementPerfect: 0,
+      casesSolved: 0,
+      perfectEvidence: 0,
+      benignCleared: 0,
+      capstonesDone: 0,
+      cleanHandoffs: 0,
     },
+    // Titles/themes earned under an older ladder stay available (see migrate.js v2 -> v3).
+    keptTitles: [],
+    keptThemes: [],
+    ladderNotice: null,
   };
 }
 
@@ -270,40 +297,115 @@ export function rankIndex(id) {
   return Math.max(0, RANKS.findIndex((r) => r.id === id));
 }
 
+/** Tiers come from content (content.tiers) so new levels slot in as data; falls back to career.js. */
+export const tiersOf = (content) => content.tiers || TIERS;
+const tierById = (content, id) => tiersOf(content).find((t) => t.id === id);
+/** Skills that belong to a tier (via its tracks). */
+export function tierSkills(content, tierId) {
+  const t = tierById(content, tierId);
+  if (!t) return [];
+  return content.skills.filter((s) => t.tracks.includes(s.track));
+}
+/** { mastered, total, available } for a tier. A tier with no built skills is not available. */
+export function tierProgress(st, content, tierId) {
+  const t = tierById(content, tierId);
+  const idx = E.indexContent(content);
+  const skills = tierSkills(content, tierId);
+  const active = skills.filter((s) => idx.activeIds.has(s.id));
+  const available = !!t && t.status === 'available' && active.length > 0 && active.length === skills.length;
+  return { mastered: active.filter((s) => E.isMastered(st, content, s.id)).length, total: skills.length, available };
+}
+const scenarioDone = (st, id) => !!st.capstones?.[id]?.completedAt;
+const scenarioExists = (content, id) => (content.scenarios || []).some((s) => s.id === id && s.status !== 'in-development');
+
+/**
+ * One row per requirement of a gate: { label, current, target, met, soon }.
+ * `soon` = depends on content that isn't built yet.
+ */
+export function gateRows(gate, st, content) {
+  const idx = E.indexContent(content);
+  const tierName = (id) => {
+    const t = tierById(content, id);
+    return t ? `Level ${t.level} ${t.name}` : id;
+  };
+  switch (gate.type) {
+    case 'mastered': {
+      const p = tierProgress(st, content, gate.tier);
+      const soon = !p.available && p.mastered < gate.count;
+      return { label: `${gate.count} ${tierName(gate.tier)} skills mastered`, current: Math.min(p.mastered, gate.count), target: gate.count, met: p.mastered >= gate.count, soon };
+    }
+    case 'tier': {
+      const p = tierProgress(st, content, gate.tier);
+      return { label: `Every ${tierName(gate.tier)} skill mastered`, current: p.mastered, target: p.total, met: p.available && p.mastered === p.total, soon: !p.available };
+    }
+    case 'skills': {
+      const names = gate.skills.map((id) => idx.skillById.get(id)?.name || id);
+      const done = gate.skills.filter((id) => idx.activeIds.has(id) && E.isMastered(st, content, id)).length;
+      const soon = !gate.skills.every((id) => idx.activeIds.has(id));
+      return { label: `${names.join(' + ')} mastered`, current: done, target: gate.skills.length, met: done === gate.skills.length, soon };
+    }
+    case 'cases': {
+      const total = (content.siemCases || []).length;
+      const solved = solvedCases(st, content);
+      return { label: `${gate.count} SIEM investigation${gate.count === 1 ? '' : 's'} solved`, current: Math.min(solved, gate.count), target: gate.count, met: solved >= gate.count, soon: total < gate.count };
+    }
+    case 'scenario': {
+      const sc = (content.scenarios || []).find((s) => s.id === gate.id);
+      const done = scenarioDone(st, gate.id);
+      return { label: `${sc ? sc.title : gate.title || 'Capstone'} completed`, current: done ? 1 : 0, target: 1, met: done, soon: !scenarioExists(content, gate.id) };
+    }
+    case 'all-tiers': {
+      const tiers = tiersOf(content);
+      const rows = tiers.map((t) => tierProgress(st, content, t.id));
+      const done = rows.filter((p) => p.available && p.mastered === p.total).length;
+      return { label: 'Every curriculum level complete', current: done, target: tiers.length, met: done === tiers.length, soon: rows.some((p) => !p.available) };
+    }
+    default:
+      return { label: `Unknown requirement ${gate.type}`, current: 0, target: 1, met: false, soon: true };
+  }
+}
+
+/** Full requirement list for a rank, XP first. */
+export function rankRequirements(rank, game, st, content) {
+  const xpRow = { label: `${rank.xp.toLocaleString('en-US')} XP`, current: Math.min(game.xp, rank.xp), target: rank.xp, met: game.xp >= rank.xp, soon: false, xp: true };
+  return [...(rank.xp ? [xpRow] : []), ...(rank.gates || []).map((g) => gateRows(g, st, content))];
+}
+
 export function gateMet(rank, st, content) {
-  const gate = rank.gate;
-  if (!gate) return true;
-  const idx = E.indexContent(content);
-  if (gate.capstone) return false; // capstone content not built yet
-  if (gate.mastered != null) return masteredIn(st, content).current >= gate.mastered;
-  if (gate.allLevel1) {
-    const m = masteredIn(st, content);
-    return m.current === m.target;
-  }
-  if (gate.skills) return gate.skills.every((id) => idx.activeIds.has(id) && E.isMastered(st, content, id));
-  return true;
+  return (rank.gates || []).every((g) => gateRows(g, st, content).met);
 }
 
-export function gateText(rank, content) {
-  const gate = rank.gate;
-  if (!gate) return '';
-  const idx = E.indexContent(content);
-  if (gate.capstone) return 'and the First shift capstone (Round 2)';
-  if (gate.mastered != null) return `and ${gate.mastered} skills mastered`;
-  if (gate.allLevel1) return 'and every Level 1 skill mastered';
-  if (gate.skills) {
-    const names = gate.skills.map((id) => idx.skillById.get(id)?.name || id);
-    const available = gate.skills.every((id) => idx.activeIds.has(id));
-    return `and ${names.join(' + ')} mastered${available ? '' : ' (Level 2+ content)'}`;
-  }
-  return '';
+/** Short text for the gates of a rank ("and 5 Level 1 Foundations skills mastered"). */
+export function gateText(rank, content, st = null) {
+  const gates = rank.gates || [];
+  if (!gates.length) return '';
+  const rows = gates.map((g) => gateRows(g, st || { skills: {}, siem: {}, capstones: {} }, content));
+  return `and ${rows.map((r) => `${r.label}${r.soon ? ' (coming soon)' : ''}`).join(', ')}`;
 }
 
-/** Highest rank on the ladder whose XP threshold and gate (and all lower ones) are met. */
+/** Highest rank on the ladder whose XP threshold and gates (and all lower ones) are met. */
 export function computeRank(game, st, content) {
   let current = RANKS[0];
   for (const r of RANKS) {
     if (game.xp >= r.xp && gateMet(r, st, content)) current = r;
+    else break;
+  }
+  return current;
+}
+
+/** The highest rank today's content can reach (all gates that exist are satisfiable). */
+export function reachableRank(content, xp = Infinity) {
+  let current = RANKS[0];
+  for (const r of RANKS) {
+    const ok = (r.gates || []).every((g) => {
+      if (g.type === 'mastered' || g.type === 'tier') return tierProgress({ skills: {} }, content, g.tier).available && tierSkills(content, g.tier).length >= (g.count || 1);
+      if (g.type === 'skills') return g.skills.every((id) => E.indexContent(content).activeIds.has(id));
+      if (g.type === 'cases') return (content.siemCases || []).length >= g.count;
+      if (g.type === 'scenario') return scenarioExists(content, g.id);
+      if (g.type === 'all-tiers') return tiersOf(content).every((t) => tierProgress({ skills: {} }, content, t.id).available);
+      return false;
+    });
+    if (ok && xp >= r.xp) current = r;
     else break;
   }
   return current;
@@ -316,16 +418,19 @@ export function currentTitle(game) {
   return RANKS[rankIndex(game.rankId)].title;
 }
 
-/** Titles the student can equip: every rank reached plus titles from earned badges. */
+/** Titles the student can equip: every rank reached, titles from earned badges, and titles kept from an older ladder. */
 export function availableTitles(game) {
   const ranks = RANKS.slice(0, rankIndex(game.rankId) + 1).map((r) => ({ id: `rank:${r.id}`, title: r.title, source: 'Rank' }));
   const badges = BADGES.filter((b) => b.title && game.badges[b.id]).map((b) => ({ id: `badge:${b.id}`, title: b.title, source: `Badge: ${b.name}` }));
-  return [...ranks, ...badges];
+  const have = new Set([...ranks, ...badges].map((t) => t.title));
+  const kept = (game.keptTitles || []).filter((t) => !have.has(t)).map((t) => ({ id: `kept:${t}`, title: t, source: 'Earned on the previous ladder' }));
+  return [...ranks, ...badges, ...kept];
 }
 
 export function unlockedThemes(game) {
   const ri = rankIndex(game.rankId);
-  return THEMES.filter((t) => rankIndex(t.rank) <= ri);
+  const kept = new Set(game.keptThemes || []);
+  return THEMES.filter((t) => rankIndex(t.rank) <= ri || kept.has(t.id));
 }
 
 export function equipTitle(game, titleId) {
@@ -524,6 +629,99 @@ export function onPlacementDone(game, st, content, placement, now) {
     game.counters.placementPerfect += 1;
   }
   return commit(game, st, content, now, 0, 'Placement complete');
+}
+
+// ------------------------------------------------------------------ operations (SIEM + capstone)
+
+/**
+ * Call after siem.recordCase. XP = case rate × score, but only for improvement on the best
+ * score already paid, so replaying a solved case can't be farmed. A wrong verdict pays only a
+ * quarter of the score: the reward is for good investigation, not for clicking through.
+ * ev: { caseDef, result (siem.scoreCase), firstSolve, now }
+ */
+export function onInvestigation(game, st, content, { caseDef, result, firstSolve = false, now }) {
+  const streak = touchStreak(game, now);
+  const rec = (st.siem.cases[caseDef.id] ??= { attempts: 0, best: 0, solved: false });
+  const effective = result.passed ? result.total : Math.round(result.total * 0.25);
+  const paid = rec.paid || 0;
+  const rate = XP_RULES.siemCase[caseDef.difficulty] || XP_RULES.siemCase[1];
+  const breakdown = [];
+  if (effective > paid) {
+    rec.paid = effective;
+    const amount = Math.round((rate * (effective - paid)) / 100);
+    if (amount > 0) breakdown.push({ label: paid ? `Case improved (${paid} → ${effective})` : `Case score ${result.total}${result.passed ? '' : ', wrong call (×0.25)'}`, amount });
+  }
+  const c = game.counters;
+  if (firstSolve) {
+    c.casesSolved += 1;
+    if (caseDef.verdict !== 'tp') c.benignCleared += 1;
+  }
+  if (result.passed && result.evidence.perfect && !rec.perfect) {
+    rec.perfect = true;
+    c.perfectEvidence += 1;
+  }
+  const xp = breakdown.reduce((a, b) => a + b.amount, 0);
+  const changes = commit(game, st, content, now, xp, `${caseDef.id}: ${breakdown.map((b) => b.label).join(' + ') || 'no new XP'}`);
+  return { xp, breakdown, streak, ...changes };
+}
+
+/** Call after capstone.recordStage. XP = stage rate × improvement on the best stage score. */
+export function onCapstoneStage(game, st, content, { stage, result, now }) {
+  const streak = touchStreak(game, now);
+  const gain = Math.max(0, result.best - result.prevBest);
+  const amount = Math.round((XP_RULES.capstoneStage * gain) / 100);
+  const breakdown = amount > 0 ? [{ label: `Stage "${stage.title}" ${result.score}%`, amount }] : [];
+  const changes = commit(game, st, content, now, amount, `${stage.id}: ${breakdown.map((b) => b.label).join('') || 'no new XP'}`);
+  return { xp: amount, breakdown, streak, ...changes };
+}
+
+/** Call after capstone.recordEscalation. XP = escalation rate × improvement on the best rubric score. */
+export function onEscalation(game, st, content, { scenario, result, now }) {
+  const streak = touchStreak(game, now);
+  const gain = Math.max(0, result.best - result.prevBest);
+  const amount = Math.round((XP_RULES.escalation * gain) / 100);
+  const c = game.counters;
+  if (result.firstCompletion) c.capstonesDone += 1;
+  if (result.total >= 85 && result.prevBest < 85) c.cleanHandoffs += 1;
+  const breakdown = amount > 0 ? [{ label: `Escalation report ${result.total}/100`, amount }] : [];
+  const changes = commit(game, st, content, now, amount, `${scenario.id} escalation: ${breakdown.map((b) => b.label).join('') || 'no new XP'}`);
+  return { xp: amount, breakdown, streak, ...changes };
+}
+
+// ------------------------------------------------------------------ XP budget
+
+/** Assumed extra from a month of daily reviews: the daily bonus plus ~10 review answers at ~7 XP. */
+export const MONTH_OF_REVIEWS = 30 * (XP_RULES.dailyReviewComplete + 10 * 7);
+
+/**
+ * Realistic maximum XP from the content that exists today, done once and well:
+ * every active question right once (with the typed bonus and a "Sure"), every skill mastered,
+ * every lesson with its worked and faded examples, every misconception resolved once,
+ * every SIEM case at 100% and the capstone at 100%. Root-gap and review XP vary per student and
+ * are left out of `total`; `withMonth` adds MONTH_OF_REVIEWS.
+ */
+export function xpBudget(content) {
+  const idx = E.indexContent(content);
+  const items = content.items.filter((i) => idx.activeIds.has(i.skill));
+  const answers = items.reduce((a, i) => a + (XP_RULES.correct[i.difficulty] || XP_RULES.correct[1]) + (i.type === 'text' ? XP_RULES.typedBonus : 0) + XP_RULES.sureCorrect, 0);
+  const mastery = idx.activeSkills.length * XP_RULES.skillMastered;
+  const lessons = (content.lessons || [])
+    .filter((l) => idx.activeIds.has(l.skill))
+    .reduce((a, l) => a + XP_RULES.lessonCompleted + (l.worked || []).length * XP_RULES.workedExample + (l.faded || []).length * XP_RULES.fadedExample, 0);
+  const misconceptions = (content.misconceptions || []).length * XP_RULES.misconceptionResolved;
+  const siem = (content.siemCases || []).reduce((a, c) => a + (XP_RULES.siemCase[c.difficulty] || XP_RULES.siemCase[1]), 0);
+  const capstone = (content.scenarios || [])
+    .filter((s) => s.kind === 'capstone' && s.status !== 'in-development')
+    .reduce((a, s) => a + s.stages.length * XP_RULES.capstoneStage + (s.escalation ? XP_RULES.escalation : 0), 0);
+  const foundations = answers + mastery + lessons + misconceptions;
+  const operations = siem + capstone;
+  const total = foundations + operations;
+  const withMonth = total + MONTH_OF_REVIEWS;
+  const at = (xp) => {
+    const rank = reachableRank(content, xp);
+    return { xp, level: levelForXp(xp), rank, rankIndex: rankIndex(rank.id), ladderPct: Math.round((rankIndex(rank.id) / (RANKS.length - 1)) * 100) };
+  };
+  return { items: items.length, answers, mastery, lessons, misconceptions, siem, capstone, foundations, operations, total, withMonth, atTotal: at(total), atMonth: at(withMonth) };
 }
 
 // ------------------------------------------------------------------ migration helper
