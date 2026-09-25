@@ -90,6 +90,93 @@ npm test
 ```
 
 The tests verify the adaptive engine (mastery updates, review scheduling, prerequisite gap routing, no immediate repeats) and the content itself (every question points to a real skill, every skill has enough questions, answers match the choices, no duplicate ids, no circular prerequisites).
+The gamification tests (`tests/game.test.js`) use a fake clock to check the XP rules, level and rank thresholds, every badge condition, streaks and grace days (including DST changes), titles and themes, and the v1 → v2 migration.
+
+## Gamification
+
+Training should feel like progressing through a SOC career, but the rewards are tied to real learning, not to clicking fast.
+
+**XP.** All values live in one table, `XP_RULES` in `js/game.js`:
+
+| Action | XP |
+| --- | --- |
+| Correct answer: easy / medium / hard | 10 / 15 / 25 |
+| Typed answer bonus (when correct) | +5 |
+| Wrong answer (effort) | 2 |
+| Missed question answered right on review | +8 |
+| Missed question cleared from review list | +10 |
+| Finish all due reviews for the day | +30 |
+| Master a skill (first time) | +100 |
+| Close a root gap | +75 |
+| "Sure" and correct (confidence) | +5 |
+| Misconception resolved | +20 |
+| Lesson / worked example / faded example | 30 / 5 / 10 |
+| Placement answer: right / wrong | 5 / 2 |
+| Easy question in a skill you already mastered | 0 |
+| Harder question in a mastered skill | ×0.5 |
+| Same skill, same day: answers 16–30 / 31+ | ×0.5 / ×0.25 |
+
+XP is never taken away. Wrong answers still earn a little for the effort. Re-answering easy questions in a skill you've already mastered earns nothing, and grinding one skill on the same day has diminishing returns. Level N starts at 50×N×(N−1) XP (level 2 = 100, level 3 = 300, level 5 = 1,000).
+
+**Ranks: the SOC career ladder.** Every rank is visible from day one. The higher ones need mastery as well as XP.
+
+| Rank | Requirement |
+| --- | --- |
+| Trainee | Starting rank |
+| Junior Analyst | 250 XP |
+| Tier 1 Analyst | 1,000 XP and 5 skills mastered |
+| Tier 2 Analyst | 2,500 XP and every Level 1 skill mastered |
+| Incident Responder | 4,500 XP and Alert triage + Incident response mastered (Level 2+ content) |
+| Threat Hunter | 7,000 XP and SIEM queries + Threat hunting mastered (Level 2+ content) |
+| SOC Lead | 10,000 XP and the SOC capstone (coming later) |
+
+Your current title, level and XP bar sit in the status bar and the **Operator** panel on the dashboard.
+
+**Badges** (25, including 4 secret ones that show as "???" until earned). The **Profile & badges** screen shows earned badges, locked silhouettes and your progress toward each one.
+
+| Badge | How to earn it | Unlocks title |
+| --- | --- | --- |
+| First Blood | Get your first correct answer. |  |
+| Certified | Master your first skill. |  |
+| Sharpshooter | Get 10 answers right in a row. |  |
+| Subnet Sniper | Get 10 Subnetting & CIDR answers right in a row. | Subnet Sniper |
+| Log Diver | Correctly analyze 25 log, packet or process scenarios. | Log Diver |
+| Hard Target | Answer 10 hard (difficulty 3) questions correctly. |  |
+| Total Recall | Get 15 typed answers right. |  |
+| Centurion | Answer 100 questions correctly. |  |
+| Quick Study | Master a skill without missing a single question in it. |  |
+| Host Hardened | Master every Host basics skill. | Host Hardener |
+| Packet Whisperer | Master every Network basics skill. | Packet Whisperer |
+| Foundation Laid | Master all Level 1 skills. |  |
+| Gap Closer | Fix a root gap the tutor identified. | Gap Closer |
+| Second Look | Clear 10 missed questions from your review list. |  |
+| Daily Duty | Finish all your due reviews on 5 different days. |  |
+| Myth Buster | Resolve 5 misconceptions. _(needs misconception checks, coming soon)_ | Myth Buster |
+| Calibrated | Be right on 80%+ of the answers you mark "Sure" (at least 20 Sure answers). _(needs confidence ratings, coming soon)_ | Calibrated |
+| On Watch I | Study 3 days in a row. |  |
+| On Watch II | Study 7 days in a row. |  |
+| On Watch III | Study 30 days in a row. | Watch Commander |
+| Night Shift | Study after 10 PM. | Night Shift |
+| Dawn Patrol *(secret)* | Study between 5 and 7 AM. |  |
+| Overqualified *(secret)* | Ace every question in the placement check. |  |
+| Grace Under Fire *(secret)* | Have a grace day keep your streak alive. |  |
+| Root Cause *(secret)* | Uncover a gap two building blocks deep. | Root Cause Analyst |
+
+**Study streak.** Your streak counts the days you study. Each calendar week you study banks one grace day, up to 2. If you miss a day, a banked grace day covers it automatically. If you miss more days than you have grace days, a fresh streak simply starts; nothing else is lost. There are no guilt messages.
+
+**Unlockables.**
+- **Titles:** every rank you reach, plus the titles from some badges (for example *Subnet Sniper*, *Packet Whisperer*, *Root Cause Analyst*). Equip one on the profile screen.
+- **Console themes, unlocked at rank-ups:** Standard cyan (Trainee), **Night Ops** amber (Junior Analyst), **Incident** red (Tier 1), **Terminal** green (Tier 2).
+
+**Feedback moments.**
+- A "+N XP" popup appears after each answer, and the result card shows the XP breakdown.
+- Badges, rank-ups and level-ups get a short HUD-style **ACHIEVEMENT UNLOCKED** card. It is queued, disappears on its own after about 3 seconds (or when you tap it), and never blocks the question flow.
+- With "reduce motion" turned on, cards appear without animation.
+
+**Saved data and migration.** Game progress is stored in `state.game`, and the saved state now has `version: 2` (`js/migrate.js`).
+- Existing v1 progress is upgraded automatically, and XP is granted retroactively for past answers, mastered skills and closed gaps.
+- Past answers count at face value, since v1 didn't record when they happened.
+- Streaks start fresh.
 
 ## Project layout
 
@@ -98,7 +185,10 @@ index.html              the page
 css/styles.css          look & feel (dark, mobile-first)
 js/app.js               screens and buttons
 js/engine.js            the adaptive engine (no browser code — unit-tested)
+js/game.js              XP, levels, ranks, badges, streaks, unlockables (unit-tested)
+js/migrate.js           versioned save-data migrations (v1 → v2)
 js/storage.js           saving progress in the browser
+js/icons.js             inline SVG icon set
 content/skills.js       skill map, tracks and prerequisites
 content/questions/*.js  the question bank
 tests/                  automated tests (node --test)
