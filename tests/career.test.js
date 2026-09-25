@@ -11,17 +11,20 @@ const T0 = new Date(2026, 8, 28, 14).getTime();
 const master = (st, id) => Object.assign(st.skills[id], { p: 0.97, attempts: 6, correct: 6, unlocked: true });
 const GATE_TYPES = new Set(['mastered', 'tier', 'skills', 'cases', 'scenario', 'all-tiers']);
 
-test('tiers: Level 1 built, Level 2 and 3 planned, each with skills on the map', () => {
+test('tiers: Level 1 and 2 built, Level 3 planned, each with skills on the map', () => {
   assert.deepEqual(CONTENT.tiers.map((t) => t.level), [1, 2, 3]);
   const [l1, l2, l3] = CONTENT.tiers;
   assert.equal(l1.status, 'available');
-  assert.equal(l2.status, 'coming-soon');
-  assert.equal(l3.status, 'coming-soon');
+  assert.equal(l2.status, 'available');
   assert.equal(G.tierProgress(E.createState(CONTENT), CONTENT, l1.id).available, true);
+  assert.equal(G.tierProgress(E.createState(CONTENT), CONTENT, l2.id).available, true);
   assert.equal(G.tierSkills(CONTENT, l1.id).length, 13);
-  for (const t of [l2, l3]) {
-    assert.ok(G.tierSkills(CONTENT, t.id).length >= 5, `${t.id} shows its planned skills`);
-    assert.ok(G.tierSkills(CONTENT, t.id).every((s) => s.comingSoon));
+  const l2skills = G.tierSkills(CONTENT, l2.id);
+  assert.ok(l2skills.length >= 6 && l2skills.every((s) => !s.comingSoon), 'Level 2 skills are live');
+  for (const id of ['l2-alert-triage', 'l2-siem', 'l2-phishing', 'l2-malware', 'l2-ir', 'l2-hunting']) assert.ok(l2skills.some((s) => s.id === id), id);
+  if (l3.status !== 'available') {
+    assert.ok(G.tierSkills(CONTENT, l3.id).length >= 5, 'l3 shows its planned skills');
+    assert.ok(G.tierSkills(CONTENT, l3.id).every((s) => s.comingSoon));
   }
   const l3names = G.tierSkills(CONTENT, l3.id).map((s) => s.name.toLowerCase()).join(' ');
   for (const topic of ['pki', 'crypt', 'kerberos', 'cloud', 'forensic', 'detection']) assert.match(l3names, new RegExp(topic));
@@ -49,23 +52,43 @@ test('ladder: 12+ ranks, unique ids and titles, rising XP, only known gate types
   for (const r of G.RANKS.slice(t2)) assert.ok(r.gates.length > 0, `${r.id} has a curriculum gate`);
 });
 
-test('today\'s content reaches Tier 1 Analyst III: about a third of the ladder', () => {
-  const top = G.reachableRank(CONTENT);
-  assert.equal(top.id, 'tier1-3');
+// Level 1 + Level 2 content only (so these checks stay true when Level 3 ships alongside).
+const L12 = {
+  ...CONTENT,
+  tiers: CONTENT.tiers.map((t) => (t.level >= 3 ? { ...t, status: 'coming-soon' } : t)),
+  skills: CONTENT.skills.map((s) => ((s.level ?? 1) >= 3 ? { ...s, comingSoon: true } : s)),
+  siemCases: CONTENT.siemCases.filter((c) => !c.tier || c.tier === 'l1' || c.tier === 'l2'),
+  scenarios: CONTENT.scenarios.filter((s) => !s.tier || s.tier === 'l1' || s.tier === 'l2'),
+};
+
+test('Level 1 + 2 content reaches Senior Analyst I: about 60% of the ladder', () => {
+  const top = G.reachableRank(L12);
+  assert.equal(top.id, 'senior-1');
   const pct = G.rankIndex(top.id) / (G.RANKS.length - 1);
-  assert.ok(pct >= 0.25 && pct <= 0.4, `${Math.round(pct * 100)}%`);
+  assert.ok(pct >= 0.5 && pct <= 0.65, `${Math.round(pct * 100)}%`);
 });
 
-test('XP budget: finishing Level 1 plus operations lands in the 25-40% band and far below max level', () => {
-  const b = G.xpBudget(CONTENT);
+test('XP budget: finishing Level 1 + 2 plus operations lands on Senior Analyst I (50-65%) and well below max level', () => {
+  const b = G.xpBudget(L12);
   assert.equal(b.total, b.foundations + b.operations);
   assert.ok(b.operations > 0 && b.siem > 0 && b.capstone > 0);
-  assert.ok(b.atTotal.xp >= G.RANKS.find((r) => r.id === 'tier1-3').xp, 'enough XP for the top reachable rank');
-  assert.equal(b.atTotal.rank.id, 'tier1-3');
-  assert.ok(b.atTotal.ladderPct >= 25 && b.atTotal.ladderPct <= 40);
-  assert.ok(b.atTotal.level <= G.MAX_LEVEL * 0.4, `level ${b.atTotal.level} of ${G.MAX_LEVEL}`);
-  assert.ok(b.atMonth.level <= G.MAX_LEVEL / 2, 'even a month of reviews stays under half the levels');
-  assert.ok(b.withMonth < G.RANKS.find((r) => r.id === 'tier2-1').xp + 5000);
+  assert.ok(b.atTotal.xp >= G.RANKS.find((r) => r.id === 'senior-1').xp, 'enough XP for Senior Analyst I');
+  assert.equal(b.atTotal.rank.id, 'senior-1');
+  assert.ok(b.atTotal.ladderPct >= 50 && b.atTotal.ladderPct <= 65, `${b.atTotal.ladderPct}%`);
+  assert.ok(b.atTotal.level <= G.MAX_LEVEL * 0.5, `level ${b.atTotal.level} of ${G.MAX_LEVEL}`);
+  assert.ok(b.atMonth.level <= G.MAX_LEVEL * 0.6, 'a month of reviews on top stays well under max level');
+  assert.ok(b.withMonth < G.RANKS.find((r) => r.id === 'senior-2').xp, 'Level 3 ranks still need Level 3 XP');
+  // Level 1 alone still tops out at Tier 1 Analyst III, below the Level 2 thresholds' reach
+  const l1 = {
+    ...L12,
+    tiers: L12.tiers.map((t) => (t.level >= 2 ? { ...t, status: 'coming-soon' } : t)),
+    skills: L12.skills.map((s) => ((s.level ?? 1) >= 2 ? { ...s, comingSoon: true } : s)),
+    siemCases: L12.siemCases.filter((c) => c.tier !== 'l2'),
+    scenarios: L12.scenarios.filter((s) => s.tier !== 'l2'),
+  };
+  const b1 = G.xpBudget(l1);
+  assert.equal(b1.atTotal.rank.id, 'tier1-3');
+  assert.ok(b1.total < G.RANKS.find((r) => r.id === 'tier2-2').xp, 'Level 1 XP alone cannot fill the Level 2 band');
 });
 
 test('themes and titles are spread across the whole ladder', () => {
@@ -91,25 +114,24 @@ test('next-rank requirements: XP row first, then gate rows with progress', () =>
   assert.match(rows[2].label, /SIEM investigation/);
   assert.equal(rows.some((x) => x.soon), false, 'everything for Tier 1 Analyst II exists today');
   const t2 = G.rankRequirements(G.RANKS.find((x) => x.id === 'tier2-1'), game, st, CONTENT);
-  assert.ok(t2.some((x) => x.soon), 'Tier 2 depends on Level 2 content');
+  assert.equal(t2.some((x) => x.soon), false, 'Level 2 content exists today');
+  assert.deepEqual([t2[1].current, t2[1].target], [0, 2], 'Tier 2 needs Level 2 mastery');
+  const s2 = G.rankRequirements(G.RANKS.find((x) => x.id === 'senior-2'), game, st, CONTENT);
+  if (CONTENT.tiers.find((t) => t.id === 'l3').status !== 'available') assert.ok(s2.some((x) => x.soon), 'Senior Analyst II depends on Level 3 content');
 });
 
-test('gates are data-driven: making Level 2 available in content opens Tier 2 ranks with no code change', () => {
-  const l2skills = G.tierSkills(CONTENT, 'l2').map((s) => s.id);
-  const content = {
-    ...CONTENT,
-    tiers: CONTENT.tiers.map((t) => (t.id === 'l2' ? { ...t, status: 'available' } : t)),
-    skills: CONTENT.skills.map((s) => (l2skills.includes(s.id) ? { ...s, comingSoon: false } : s)),
-    items: [...CONTENT.items, ...l2skills.map((id) => ({ id: `fake-${id}`, skill: id, type: 'mc', difficulty: 1, prompt: 'x', choices: ['a', 'b'], answer: 'a', explanation: 'x' }))],
-  };
-  assert.equal(G.reachableRank(content).id, 'tier2-3', 'Senior Analyst also needs a Level 2 capstone');
-  const st = E.createState(content);
+test('gates are data-driven: Tier 2 ranks follow Level 2 content, Senior Analyst I needs the Night-shift lead capstone', () => {
+  const content = { ...L12, scenarios: L12.scenarios.filter((s) => s.id !== 'night-shift-lead') };
+  assert.equal(G.reachableRank(content).id, 'tier2-3', 'without the Level 2 capstone the ladder stops at Tier 2 Analyst III');
+  const st = E.createState(L12);
   const game = G.createGame();
   game.xp = 20000;
-  E.indexContent(content).activeSkills.forEach((s) => master(st, s.id));
-  for (const c of content.siemCases) st.siem.cases[c.id] = { solved: true };
+  E.indexContent(L12).activeSkills.forEach((s) => master(st, s.id));
+  for (const c of L12.siemCases) st.siem.cases[c.id] = { solved: true };
   st.capstones['first-shift'] = { completedAt: T0 };
-  assert.equal(G.computeRank(game, st, content).id, 'tier2-3');
+  assert.equal(G.computeRank(game, st, L12).id, 'tier2-3', 'capstone not done yet');
+  st.capstones['night-shift-lead'] = { completedAt: T0 };
+  assert.equal(G.computeRank(game, st, L12).id, 'senior-1');
   // and a new tier can be added as data
   const withL4 = { ...CONTENT, tiers: [...CONTENT.tiers, { id: 'l4', level: 4, name: 'Expert', status: 'coming-soon', tracks: ['expert'] }] };
   assert.equal(G.gateRows({ type: 'all-tiers' }, E.createState(CONTENT), withL4).target, 4);

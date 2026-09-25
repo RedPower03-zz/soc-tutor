@@ -933,9 +933,14 @@ export function nextItem(st, content, { session = 'auto', skillId = null, rng = 
 // ---------------------------------------------------------------- placement
 
 /** Builds a short placement quiz: one medium question per Level 1 skill. */
+/** Skills covered by the placement check: Level 1 foundations only (higher levels build on them and are learned). */
+export function placementSkills(content) {
+  return indexContent(content).activeSkills.filter((s) => (s.level ?? 1) === 1);
+}
+
 export function startPlacement(st, content, { rng = Math.random } = {}) {
   const idx = indexContent(content);
-  const queue = idx.activeSkills.map((s) => {
+  const queue = placementSkills(content).map((s) => {
     const items = idx.itemsBySkill.get(s.id);
     const medium = items.filter((i) => i.difficulty === 2);
     const pool = medium.length ? medium : items;

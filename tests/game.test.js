@@ -136,7 +136,7 @@ test('rank ladder: XP thresholds plus data-driven gates (mastery, cases, capston
   master(st, 'net-ip');
   assert.equal(rank(), 'tier1-1');
   game.xp = 99999;
-  idx.activeSkills.forEach((s) => master(st, s.id));
+  idx.activeSkills.filter((s) => (s.level ?? 1) === 1).forEach((s) => master(st, s.id));
   assert.equal(rank(), 'tier1-1', 'Tier 1 Analyst II also needs a solved SIEM case');
   st.siem.cases['siem-rdp-brute'] = { solved: true };
   assert.equal(rank(), 'tier1-2');
@@ -144,9 +144,18 @@ test('rank ladder: XP thresholds plus data-driven gates (mastery, cases, capston
   st.siem.cases['siem-scanner'] = { solved: true };
   assert.equal(rank(), 'tier1-2', 'Tier 1 Analyst III also needs the First shift capstone');
   st.capstones['first-shift'] = { completedAt: DAY1 };
-  assert.equal(rank(), 'tier1-3');
-  assert.equal(G.computeRank(game, st, CONTENT).id, G.reachableRank(CONTENT).id, 'nothing above is reachable until Level 2 exists');
-  assert.match(G.gateText(G.RANKS.find((r) => r.id === 'tier2-1'), CONTENT), /Level 2 SOC Operations.*coming soon/);
+  assert.equal(rank(), 'tier1-3', 'Tier 2 Analyst I needs Level 2 mastery');
+  const l2 = idx.activeSkills.filter((s) => s.level === 2).map((s) => s.id);
+  l2.slice(0, 2).forEach((id) => master(st, id));
+  assert.equal(rank(), 'tier2-1');
+  l2.forEach((id) => master(st, id));
+  assert.equal(rank(), 'tier2-3', 'Senior Analyst I also needs the Night-shift lead capstone');
+  st.capstones['night-shift-lead'] = { completedAt: DAY1 };
+  assert.equal(rank(), 'senior-1');
+  if (CONTENT.tiers.find((t) => t.id === 'l3').status !== 'available') {
+    assert.equal(rank(), G.reachableRank(CONTENT).id, 'nothing above is reachable until Level 3 exists');
+    assert.match(G.gateText(G.RANKS.find((r) => r.id === 'senior-2'), CONTENT), /coming soon/);
+  }
 });
 
 test('rank-ups are reported once and unlock themes; titles and themes can be equipped only when earned', () => {

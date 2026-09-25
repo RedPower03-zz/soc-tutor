@@ -8,7 +8,7 @@
 //   alert: { id, name, severity, time, host, user, source, detail }
 //   logs: [{ id, t 'HH:MM:SS', src, host, user, type, msg }]
 //         src: 'winevt' (Windows event logs) | 'process' (process creation / EDR) |
-//              'firewall' | 'dns' | 'proxy'
+//              'firewall' | 'dns' | 'proxy' | 'idp' | 'ops' | 'email' (mail gateway) | 'sandbox'
 //   key:  [{ id, label, rows: [log ids], why }]   evidence a strong analyst pins; pinning ANY
 //         row of a group counts as finding it
 //   related: [log ids]   relevant context: pinning these is neither rewarded nor penalised
@@ -34,6 +34,8 @@ export const SIEM_SOURCES = {
   proxy: { label: 'Web proxy', code: 'PRXY' },
   idp: { label: 'Cloud sign-in logs', code: 'IDP' },
   ops: { label: 'Ops & SIEM health', code: 'OPS' },
+  email: { label: 'Mail gateway', code: 'MAIL' },
+  sandbox: { label: 'Malware sandbox', code: 'SBX' },
 };
 
 export const VERDICTS = {

@@ -91,6 +91,26 @@ export function ladderNoticeBanner() {
     </div>`;
 }
 
+const soonTiers = () => G.tiersOf(CONTENT).filter((t) => t.status !== 'available');
+const levelsText = (ts) => ts.map((t) => t.level).join(' and ');
+function restOfLadder() {
+  const soon = soonTiers();
+  return soon.length ? ` The rest of the ladder is for Level ${levelsText(soon)}.` : '';
+}
+function soonLine() {
+  const soon = soonTiers();
+  return soon.length ? `Ranks below open as Level ${levelsText(soon)} ${soon.length > 1 ? 'modules ship' : 'ships'}.` : 'Ranks below need more XP and progress.';
+}
+
+/** "Plus Operations" line under a built level: its SIEM cases and capstones. */
+function tierOpsLine(t) {
+  const cases = CONTENT.siemCases.filter((c) => (c.tier || 'l1') === t.id).length;
+  const caps = CONTENT.scenarios.filter((s) => s.kind === 'capstone' && s.status !== 'in-development' && (s.tier || (s.id === 'first-shift' ? 'l1' : null)) === t.id);
+  if (!cases && !caps.length) return '';
+  const parts = [cases ? `${cases} SIEM case${cases > 1 ? 's' : ''}` : '', ...caps.map((s) => `the ${s.title} capstone`)].filter(Boolean);
+  return `<p class="small muted tier-ops">${icon('target')}Plus Operations: ${esc(parts.join(' and '))}.</p>`;
+}
+
 export function renderCareer() {
   const g = st().game;
   const ri = G.rankIndex(g.rankId);
@@ -107,7 +127,7 @@ export function renderCareer() {
           <div class="tier-head"><span class="tier-lvl mono">L${t.level}</span><b>${esc(t.name)}</b>${avail ? ctx.chip([`${p.mastered}/${p.total} mastered`, p.mastered === p.total ? 'ok' : 'info']) : ctx.chip(['Coming soon', 'dim'])}</div>
           <p class="small muted">${esc(t.summary)}</p>
           ${avail ? ctx.bar(p.total ? p.mastered / p.total : 0, p.mastered === p.total ? 'ok' : '') : `<div class="pill-list">${skills.map((s) => `<span class="chip dim pill">${esc(s.name)}</span>`).join('')}</div>`}
-          ${t.level === 1 ? `<p class="small muted tier-ops">${icon('target')}Plus Operations: ${CONTENT.siemCases.length} SIEM cases and the First shift capstone.</p>` : ''}
+          ${avail ? tierOpsLine(t) : ''}
         </li>`;
     })
     .join('');
@@ -122,7 +142,7 @@ export function renderCareer() {
     lastBand = r.band;
     const themes = G.THEMES.filter((t) => t.rank === r.id);
     const reachLine = i === reachI && reachI < G.RANKS.length - 1
-      ? `<li class="reach-line"><span>${icon('flag')}Today's content reaches this far. Ranks below open as Level 2 and 3 modules ship.</span></li>`
+      ? `<li class="reach-line"><span>${icon('flag')}Today's content reaches this far. ${esc(soonLine())}</span></li>`
       : '';
     return `${head}<li class="rung ${stt} ${soon && stt === 'locked' ? 'soon' : ''}" ${i === ri ? 'id="you-are-here"' : ''}>
         <span class="rung-ins">${rankInsignia(i, 'sm')}</span>
@@ -162,7 +182,7 @@ export function renderCareer() {
       icon: 'layers',
       meta: `${G.tiersOf(CONTENT).length} levels`,
       body: `<ul class="tiers">${tiers}</ul>
-        <p class="small muted">Everything built today is worth about <b class="mono">${fmt(budget.total)} XP</b> done once and done well: level ${budget.atTotal.level} and <b>${esc(budget.atTotal.rank.title)}</b>, rank ${budget.atTotal.rankIndex + 1} of ${G.RANKS.length}. The rest of the ladder is for Level 2 and 3.</p>`,
+        <p class="small muted">Everything built today is worth about <b class="mono">${fmt(budget.total)} XP</b> done once and done well: level ${budget.atTotal.level} and <b>${esc(budget.atTotal.rank.title)}</b>, rank ${budget.atTotal.rankIndex + 1} of ${G.RANKS.length}. ${restOfLadder()}</p>`,
     })}
     ${ctx.panel({ title: 'Career ladder', icon: 'chart', meta: `${reachI + 1} of ${G.RANKS.length} open`, cls: 'ladder-panel', body: `<ol class="ladder">${rungs}</ol><p class="small muted">Each rank needs XP <b>and</b> curriculum progress, so XP alone never skips ahead. Your rank never goes down during training.</p>` })}
     <button class="btn secondary" data-action="profile">${icon('award')}Profile, titles &amp; themes</button>
@@ -251,7 +271,7 @@ export function renderSiemList() {
       const status = !open ? ['Locked', 'dim'] : rec?.solved ? [`Solved · ${rec.best}`, 'ok'] : active?.caseId === c.id ? ['In progress', 'info'] : rec ? [`Best ${rec.best}`, 'warn'] : ['New', 'ready'];
       const req = c.requires.skills.map((s) => `<span class="req-skill ${learned.includes(s) ? 'ok' : ''}">${icon(learned.includes(s) ? 'check' : 'lock')}${esc(ctx.skillName(s))}</span>`).join('');
       return `<li class="case-card ${open ? '' : 'locked'} ${rec?.solved ? 'solved' : ''} ${c.ambiguous ? 'amb' : ''}">
-          <div class="case-top"><span class="mono case-id">${esc(c.alert.id)}</span>${diffPips(c.difficulty)}<span class="case-diff mono">${DIFF[c.difficulty][0]}</span>${ctx.chip(status)}</div>
+          <div class="case-top"><span class="mono case-id">${esc(c.alert.id)}</span>${diffPips(c.difficulty)}<span class="case-diff mono">${DIFF[c.difficulty][0]}</span>${c.tier === 'l2' ? '<span class="case-tier">L2</span>' : ''}${ctx.chip(status)}</div>
           <div class="case-title">${esc(c.title)}${c.ambiguous ? ambTag() : ''}</div>
           <div class="case-alert small">${ctx.chip(SEV[c.alert.severity] || ['Alert', 'warn'])}<span>${esc(c.alert.name)}</span></div>
           <p class="small muted">${esc(c.summary)}</p>
@@ -679,6 +699,34 @@ function renderAmbiguousFeedback(c, sub, r, rec, xp) {
 let cap = null; // { id, view: 'overview'|'stage'|'escalation'|'result', stageId, answers, sel, result }
 const scenarioById = (id) => CONTENT.scenarios.find((s) => s.id === id);
 
+// Report screen wording. First shift uses these defaults; a capstone can override any of them in escalation.ui.
+const UI_DEFAULTS = {
+  panelTitle: 'First shift',
+  title: 'Escalation to Tier 2',
+  barTitle: 'Escalation to Tier 2',
+  rowText: 'Decide if it is real and write the handoff: summary, scope, timeline, IOCs, actions, severity.',
+  alertTag: 'Escalation',
+  intro: 'You have worked the whole chain. Tier 2 will act on exactly what you write here, so be specific and leave out the noise.',
+  writeLabel: 'Write the escalation',
+  sendLabel: 'Send escalation',
+  reviseLabel: 'Revise the report',
+  feedbackTitle: 'Escalation feedback',
+  verdictLabel: 'Verdict',
+  verdictText: 'True positive, escalated',
+  passNote: 'Capstone complete. Tier 2 has what they need.',
+  failNote: null,
+};
+const capUi = (sc) => ({ ...UI_DEFAULTS, ...(sc.id === 'first-shift' ? {} : { panelTitle: sc.title, title: 'Final report', barTitle: 'Final report', writeLabel: 'Write the report', sendLabel: 'Submit report', feedbackTitle: 'Report feedback' }), ...(sc.escalation?.ui || {}) });
+// Default form layout (First shift). escalation.panels overrides it.
+const DEFAULT_PANELS = [
+  { title: 'Summary', icon: 'terminal', fields: ['summary', 'severity'] },
+  { title: 'Scope', icon: 'host', fields: ['hosts', 'users'] },
+  { title: 'Timeline', icon: 'clock', fields: ['timeline'] },
+  { title: 'Indicators of compromise', icon: 'crosshair', fields: ['iocs'] },
+  { title: 'Recommended actions', icon: 'shield', fields: ['actions'] },
+];
+const choiceLabel = (def, v) => (v == null ? 'none' : def.labels?.[v] ?? SEV[v]?.[0] ?? v);
+
 function renderCapstone() {
   const sc = scenarioById(cap.id);
   if (cap.view === 'stage') return renderStage(sc);
@@ -721,12 +769,13 @@ function renderCapOverview(sc) {
     })
     .join('');
   const escOpen = C.escalationUnlocked(sc, st());
+  const ui = capUi(sc);
   ctx.setScreen('capstone');
   ctx.render(`
     ${ctx.statusBar()}
     ${qbar('Capstone', sc.title)}
     ${ctx.panel({
-      title: 'First shift',
+      title: esc(ui.panelTitle),
       icon: 'flag',
       meta: `${p.stagesDone}/${p.stages} stages`,
       hud: true,
@@ -744,7 +793,7 @@ function renderCapOverview(sc) {
       body: `<ol class="stage-list">${rows}
           <li class="stage-row ${p.completed ? 'done' : escOpen ? 'ready' : 'locked'}">
             <span class="stage-no mono">${icon('send')}</span>
-            <span class="stage-main"><span class="stage-top"><b>Escalation to Tier 2</b>${p.completed ? ctx.chip([`${p.score}/100`, 'ok']) : escOpen ? ctx.chip(['Ready', 'info']) : ctx.chip(['Locked', 'dim'])}</span><em>Decide if it is real and write the handoff: summary, scope, timeline, IOCs, actions, severity.</em>${escOpen ? '' : '<div class="stage-why small muted">Finish all four stages first.</div>'}</span>
+            <span class="stage-main"><span class="stage-top"><b>${esc(ui.title)}</b>${p.completed ? ctx.chip([`${p.score}/100`, 'ok']) : escOpen ? ctx.chip(['Ready', 'info']) : ctx.chip(['Locked', 'dim'])}</span><em>${esc(ui.rowText)}</em>${escOpen ? '' : `<div class="stage-why small muted">Finish all ${sc.stages.length} stages first.</div>`}</span>
             ${escOpen ? `<button class="btn mini ${p.completed ? 'secondary' : 'primary'}" data-action="cap-escalation">${p.escalated ? 'Revise' : 'Write'}</button>` : `<span class="stage-lock">${icon('lock')}</span>`}
           </li>
         </ol>
@@ -802,7 +851,7 @@ function renderStage(sc) {
             ? nextStatus.unlocked
               ? `<button class="btn primary" data-action="cap-stage" data-stage="${next.id}">${icon('next')}Stage ${i + 2}: ${esc(next.title)}</button>`
               : `<p class="small muted">Stage ${i + 2} (${esc(next.title)}) opens after the lesson${nextStatus.missingLessons.length > 1 ? 's' : ''}:</p><div class="stage-why">${lessonChips(nextStatus.missingLessons)}</div>`
-            : `<button class="btn primary" data-action="cap-escalation">${icon('send')}Write the escalation</button>`
+            : `<button class="btn primary" data-action="cap-escalation">${icon('send')}${esc(capUi(sc).writeLabel)}</button>`
         }
         <button class="btn secondary" data-action="cap-replay" data-stage="${stage.id}">${icon('review')}Replay stage</button>`,
     });
@@ -823,7 +872,7 @@ function finishStageIfDone(sc) {
   const stage = sc.stages.find((s) => s.id === cap.stageId);
   if (!stage.questions.every((q) => q.id in cap.answers) || cap.result) return;
   const result = C.recordStage(st(), sc, stage, cap.answers, ctx.now());
-  const g = G.onCapstoneStage(st().game, st(), CONTENT, { stage, result, now: ctx.now() });
+  const g = G.onCapstoneStage(st().game, st(), CONTENT, { stage, result, now: ctx.now(), scenario: sc });
   cap.result = result;
   cap.xp = g.xp;
   ctx.save();
@@ -834,16 +883,23 @@ function finishStageIfDone(sc) {
 
 function draft(sc) {
   const cs = C.capstoneState(st(), sc.id);
-  cs.draft ??= cs.escalation ? { ...cs.escalation } : { summary: '', severity: null, hosts: [], users: [], timeline: [], iocs: [], actions: [] };
+  cs.draft ??= cs.escalation ? { ...C.emptyReport(sc), ...cs.escalation } : C.emptyReport(sc);
   delete cs.draft.submittedAt;
   return cs.draft;
 }
 
+const choicesMissing = (sc, d) => Object.keys(sc.escalation.weights).filter((f) => C.fieldKind(sc.escalation.fields[f]) === 'choice' && !d[f]);
+
 function renderEscalation(sc) {
   const F = sc.escalation.fields;
   const d = draft(sc);
-  const group = (field, opts, { mono = false, timeline = false } = {}) =>
-    `<fieldset class="ck-group ${timeline ? 'timeline' : ''}"><legend class="field-label">${esc(F[field].label)}</legend>
+  const ui = capUi(sc);
+  const group = (field) => {
+    const def = F[field];
+    const timeline = def.options.some((o) => typeof o === 'object');
+    const mono = ['hosts', 'users', 'iocs'].includes(field);
+    const opts = timeline ? def.options : stableOrder(def.options);
+    return `<fieldset class="ck-group ${timeline ? 'timeline' : ''}"><legend class="field-label">${esc(def.label)}</legend>
       ${opts
         .map((o) => {
           const val = timeline ? o.id : o;
@@ -852,28 +908,38 @@ function renderEscalation(sc) {
         })
         .join('')}
     </fieldset>`;
+  };
+  const choice = (field) => {
+    const def = F[field];
+    if (field === 'severity' && !def.labels) {
+      return `<div class="field-label spaced">${esc(def.label)}</div>
+        <div class="sev-pick" role="radiogroup" aria-label="${esc(def.label)}">${def.options.map((o) => `<button type="button" class="sev-opt s-${o} ${d[field] === o ? 'on' : ''}" role="radio" aria-checked="${d[field] === o}" data-action="cap-sev" data-field="${field}" data-sev="${o}">${esc(SEV[o][0])}</button>`).join('')}</div>`;
+    }
+    return `<div class="field-label spaced">${esc(def.label)}</div>
+      <div class="choice-pick" role="radiogroup" aria-label="${esc(def.label)}">${def.options.map((o) => `<button type="button" class="pick-opt ${d[field] === o ? 'on' : ''}" role="radio" aria-checked="${d[field] === o}" data-action="cap-sev" data-field="${field}" data-sev="${esc(o)}">${esc(choiceLabel(def, o))}</button>`).join('')}</div>`;
+  };
+  const text = (field) => {
+    const def = F[field];
+    return `<label class="field-label" for="esc-${field}">${field === 'summary' ? 'What happened, in plain words' : esc(def.label)}</label>
+      <textarea id="esc-${field}" data-esc="${field}" class="text-answer writeup" rows="6" maxlength="1500" placeholder="${esc(def.placeholder || 'How it started, what is affected, how bad it is, what you need Tier 2 to do.')}">${esc(d[field] || '')}</textarea>
+      <p class="small muted" id="esc-count">${String(d[field] || '').trim().length} characters</p>`;
+  };
+  const fieldHtml = (field) => {
+    const kind = C.fieldKind(F[field]);
+    return kind === 'text' ? text(field) : kind === 'choice' ? choice(field) : group(field);
+  };
+  const panels = (sc.escalation.panels || DEFAULT_PANELS).map((p) => ctx.panel({ title: esc(p.title), icon: p.icon, body: p.fields.map(fieldHtml).join('') })).join('');
+  const missing = choicesMissing(sc, d);
   ctx.setScreen('cap-escalation');
   ctx.render(`
     ${ctx.statusBar()}
-    ${qbar('Capstone', 'Escalation to Tier 2', 'capstone', 'Back to the capstone')}
-    <div class="alert crit" role="note"><div class="alert-tag">${icon('send')}<span>Escalation · ${esc(sc.alert.id)}</span></div><div class="alert-msg">You have worked the whole chain. Tier 2 will act on exactly what you write here, so be specific and leave out the noise.</div></div>
+    ${qbar('Capstone', ui.barTitle, 'capstone', 'Back to the capstone')}
+    <div class="alert crit" role="note"><div class="alert-tag">${icon('send')}<span>${esc(ui.alertTag)} · ${esc(sc.alert.id)}</span></div><div class="alert-msg">${esc(ui.intro)}</div></div>
     <form class="esc-form" id="esc-form" onsubmit="return false">
-      ${ctx.panel({
-        title: 'Summary',
-        icon: 'terminal',
-        body: `<label class="field-label" for="esc-summary">What happened, in plain words</label>
-          <textarea id="esc-summary" data-esc="summary" class="text-answer writeup" rows="6" maxlength="1500" placeholder="How it started, what is affected, how bad it is, what you need Tier 2 to do.">${esc(d.summary)}</textarea>
-          <p class="small muted" id="esc-count">${d.summary.trim().length} characters</p>
-          <div class="field-label spaced">${esc(F.severity.label)}</div>
-          <div class="sev-pick" role="radiogroup" aria-label="Severity">${F.severity.options.map((o) => `<button type="button" class="sev-opt s-${o} ${d.severity === o ? 'on' : ''}" role="radio" aria-checked="${d.severity === o}" data-action="cap-sev" data-sev="${o}">${esc(SEV[o][0])}</button>`).join('')}</div>`,
-      })}
-      ${ctx.panel({ title: 'Scope', icon: 'host', body: `${group('hosts', stableOrder(F.hosts.options), { mono: true })}${group('users', stableOrder(F.users.options), { mono: true })}` })}
-      ${ctx.panel({ title: 'Timeline', icon: 'clock', body: group('timeline', F.timeline.options, { timeline: true }) })}
-      ${ctx.panel({ title: 'Indicators of compromise', icon: 'crosshair', body: group('iocs', stableOrder(F.iocs.options), { mono: true }) })}
-      ${ctx.panel({ title: 'Recommended actions', icon: 'shield', body: group('actions', stableOrder(F.actions.options)) })}
+      ${panels}
     </form>
-    <button class="btn primary" data-action="cap-submit" id="cap-submit" ${d.severity ? '' : 'disabled'}>${icon('send')}Send escalation</button>
-    <p class="btn-note" id="cap-note">${d.severity ? 'Scored against a rubric; the model answer is shown afterwards.' : 'Pick a severity to send.'}</p>
+    <button class="btn primary" data-action="cap-submit" id="cap-submit" ${missing.length ? 'disabled' : ''}>${icon('send')}${esc(ui.sendLabel)}</button>
+    <p class="btn-note" id="cap-note">${missing.length ? `Pick ${missing.map((f) => F[f].label.toLowerCase()).join(' and ')} to send.` : 'Scored against a rubric; the model answer is shown afterwards.'}</p>
     <button class="btn secondary" data-action="capstone">${icon('back')}Save draft &amp; go back</button>
   `);
 }
@@ -883,15 +949,21 @@ function renderEscalationResult(sc) {
   const r = cap.result || C.scoreEscalation(sc, cs.escalation);
   const F = sc.escalation.fields;
   const M = sc.escalation.model;
+  const ui = capUi(sc);
+  const optLabel = (field, v) => {
+    const o = F[field].options.find((x) => typeof x === 'object' && x.id === v);
+    return o ? `${o.t} ${o.text}` : v;
+  };
   const detail = (row) => {
     const d = row.detail;
-    if (row.field === 'summary') {
+    const kind = C.fieldKind(F[row.field]);
+    if (kind === 'text') {
       return d.tooShort
-        ? `<p class="small crit-text">Too short to score (at least ${F.summary.minLength} characters).</p>`
+        ? `<p class="small crit-text">Too short to score (at least ${F[row.field].minLength} characters).</p>`
         : `<ul class="rub-items">${d.hits.map((h) => `<li class="ok-text">${icon('check')}${esc(h)}</li>`).join('')}${d.misses.map((h) => `<li class="warn-text">${icon('x')}Missing: ${esc(h)}</li>`).join('')}</ul>`;
     }
-    if (row.field === 'severity') return `<p class="small">You: <b>${esc(d.given ? SEV[d.given][0] : 'none')}</b> · Model: <b>${esc(SEV[d.model][0])}</b></p>`;
-    const label = (v) => (row.field === 'timeline' ? (() => { const o = F.timeline.options.find((x) => x.id === v); return `${o.t} ${o.text}`; })() : v);
+    if (kind === 'choice') return `<p class="small">You: <b>${esc(choiceLabel(F[row.field], d.given))}</b> · Model: <b>${esc(choiceLabel(F[row.field], d.model))}</b></p>`;
+    const label = (v) => optLabel(row.field, v);
     return `<ul class="rub-items">${d.right.map((v) => `<li class="ok-text">${icon('check')}${esc(label(v))}</li>`).join('')}${d.wrong.map((v) => `<li class="crit-text">${icon('x')}Should not be here: ${esc(label(v))}</li>`).join('')}${d.missed.map((v) => `<li class="warn-text">${icon('clock')}Missed: ${esc(label(v))}</li>`).join('')}</ul>`;
   };
   const rows = r.rows
@@ -900,11 +972,24 @@ function renderEscalationResult(sc) {
       return `<li class="rub-row"><div class="rub-head"><b>${esc(row.label)}</b><span class="mono">${row.points}/${row.max}</span></div>${ctx.bar(frac, frac >= 0.99 ? 'ok' : frac < 0.4 ? 'crit' : '')}${detail(row)}</li>`;
     })
     .join('');
-  const tl = F.timeline.correct.map((id) => F.timeline.options.find((o) => o.id === id));
+  // Model answer: summary and severity first, then the other fields in rubric order.
+  const modelRest = Object.keys(sc.escalation.weights)
+    .filter((f) => !['summary', 'severity', 'hosts', 'users'].includes(f))
+    .map((f) => {
+      const def = F[f];
+      const kind = C.fieldKind(def);
+      if (kind === 'text') return `<div class="label spaced">${esc(def.label)}</div><blockquote class="quote">${esc(M[f])}</blockquote>`;
+      if (kind === 'choice') return `<div class="label spaced">${esc(def.label)}: <span class="ok-text">${esc(choiceLabel(def, M[f]))}</span></div>${M[`${f}Note`] ? `<p class="small muted">${esc(M[`${f}Note`])}</p>` : ''}`;
+      if (f === 'timeline') return `<div class="label spaced">Timeline</div><ul class="model-tl small">${def.correct.map((id) => def.options.find((o) => o.id === id)).map((o) => `<li><b class="mono">${esc(o.t)}</b> ${esc(o.text)}</li>`).join('')}</ul>`;
+      const title = { iocs: 'IOCs', actions: 'Actions' }[f] || def.label;
+      return `<div class="label spaced">${esc(title)}</div><ul class="model-list ${f === 'iocs' ? 'mono ' : ''}small">${def.correct.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+    })
+    .join('');
+  const scope = F.hosts && F.users ? `<div class="label spaced">Scope</div><p class="mono small">${F.hosts.correct.map(esc).join(', ')} · accounts ${F.users.correct.map(esc).join(', ')}</p>` : '';
   ctx.setScreen('cap-result');
   ctx.render(`
     ${ctx.statusBar()}
-    ${qbar('Capstone', 'Escalation feedback', 'capstone', 'Back to the capstone')}
+    ${qbar('Capstone', ui.feedbackTitle, 'capstone', 'Back to the capstone')}
     ${ctx.panel({
       title: 'Rubric score',
       icon: r.passed ? 'check' : 'x',
@@ -913,7 +998,7 @@ function renderEscalationResult(sc) {
       cls: `feedback ${r.passed ? 'fb-ok' : 'fb-bad'}`,
       body: `<div class="result-top">
           <div class="readout-block"><div class="readout big">${r.total}<small>/100</small></div><div class="label">${r.total >= 85 ? 'Clean handoff' : r.passed ? 'Handoff accepted' : 'Sent back'}</div></div>
-          <div class="verdict-line"><div class="label">Verdict</div><div class="vl-given ok-text">${icon('check')}True positive, escalated</div><div class="small muted">${r.passed ? 'Capstone complete. Tier 2 has what they need.' : `Tier 2 needs more to act on. ${sc.escalation.passScore}+ completes the capstone.`}</div></div>
+          <div class="verdict-line"><div class="label">${esc(ui.verdictLabel)}</div><div class="vl-given ok-text">${icon('check')}${esc(ui.verdictText)}</div><div class="small muted">${r.passed ? esc(ui.passNote) : esc(ui.failNote || `Tier 2 needs more to act on. ${sc.escalation.passScore}+ completes the capstone.`)}</div></div>
         </div>
         ${cap.xp ? `<div class="xp-earned"><div class="label row"><span>XP earned</span><b class="mono xp-gain">+${cap.xp} XP</b></div></div>` : ''}
         <ul class="rub-list">${rows}</ul>`,
@@ -923,20 +1008,18 @@ function renderEscalationResult(sc) {
       icon: 'award',
       cls: 'model-panel',
       body: `<div class="label">Summary</div><blockquote class="quote">${esc(M.summary)}</blockquote>
-        <div class="label spaced">Severity: <span class="crit-text">${esc(SEV[M.severity][0])}</span></div><p class="small muted">${esc(M.severityNote)}</p>
-        <div class="label spaced">Scope</div><p class="mono small">${F.hosts.correct.map(esc).join(', ')} · accounts ${F.users.correct.map(esc).join(', ')}</p>
-        <div class="label spaced">Timeline</div><ul class="model-tl small">${tl.map((o) => `<li><b class="mono">${esc(o.t)}</b> ${esc(o.text)}</li>`).join('')}</ul>
-        <div class="label spaced">IOCs</div><ul class="model-list mono small">${F.iocs.correct.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-        <div class="label spaced">Actions</div><ul class="model-list small">${F.actions.correct.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`,
+        ${M.severity ? `<div class="label spaced">Severity: <span class="crit-text">${esc(SEV[M.severity][0])}</span></div><p class="small muted">${esc(M.severityNote || '')}</p>` : ''}
+        ${scope}
+        ${modelRest}`,
     })}
-    <button class="btn primary" data-action="cap-escalation">${icon('review')}Revise the report</button>
+    <button class="btn primary" data-action="cap-escalation">${icon('review')}${esc(ui.reviseLabel)}</button>
     <button class="btn secondary" data-action="home">${icon('back')}Back to dashboard</button>
   `);
 }
 
 function submitEscalation(sc) {
   const d = draft(sc);
-  const report = { summary: d.summary, severity: d.severity, hosts: [...d.hosts], users: [...d.users], timeline: [...d.timeline], iocs: [...d.iocs], actions: [...d.actions] };
+  const report = Object.fromEntries(Object.keys(sc.escalation.weights).map((f) => [f, Array.isArray(d[f]) ? [...d[f]] : d[f]]));
   const result = C.recordEscalation(st(), sc, report, ctx.now());
   const g = G.onEscalation(st().game, st(), CONTENT, { scenario: sc, result, now: ctx.now() });
   cap.result = result;
@@ -1086,15 +1169,21 @@ export function handleClick(action, el) {
       renderCapstone();
       return true;
     case 'cap-sev': {
+      // graded single choice: severity, or any other choice field (data-field)
       const sc = scenarioById(cap.id);
-      draft(sc).severity = el.dataset.sev;
+      const field = el.dataset.field || 'severity';
+      const d = draft(sc);
+      d[field] = el.dataset.sev;
       ctx.save();
-      for (const b of document.querySelectorAll('.sev-opt')) {
+      for (const b of document.querySelectorAll(`[data-action="cap-sev"][data-field="${field}"]`)) {
         b.classList.toggle('on', b.dataset.sev === el.dataset.sev);
         b.setAttribute('aria-checked', String(b.dataset.sev === el.dataset.sev));
       }
-      document.getElementById('cap-submit').disabled = false;
-      document.getElementById('cap-note').textContent = 'Scored against a rubric; the model answer is shown afterwards.';
+      const missing = choicesMissing(sc, d);
+      document.getElementById('cap-submit').disabled = missing.length > 0;
+      document.getElementById('cap-note').textContent = missing.length
+        ? `Pick ${missing.map((f) => sc.escalation.fields[f].label.toLowerCase()).join(' and ')} to send.`
+        : 'Scored against a rubric; the model answer is shown afterwards.';
       return true;
     }
     case 'cap-submit':
@@ -1148,8 +1237,8 @@ export function handleInput(e) {
   if (cap && t.dataset.esc) {
     const d = draft(scenarioById(cap.id));
     const field = t.dataset.esc;
-    if (field === 'summary') {
-      d.summary = t.value;
+    if (t.tagName === 'TEXTAREA') {
+      d[field] = t.value;
       document.getElementById('esc-count').textContent = `${t.value.trim().length} characters`;
     } else if (t.type === 'checkbox') {
       const set = new Set(d[field] || []);

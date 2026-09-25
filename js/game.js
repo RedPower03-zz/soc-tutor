@@ -63,6 +63,7 @@ export const XP_TABLE = [
   ['Placement answer: right / wrong', `${XP_RULES.placementCorrect} / ${XP_RULES.placementAttempt}`],
   ['SIEM case (× your score): easy / medium / hard', `${XP_RULES.siemCase[1]} / ${XP_RULES.siemCase[2]} / ${XP_RULES.siemCase[3]}`],
   ['First shift: each stage / escalation report (× score)', `${XP_RULES.capstoneStage} / ${XP_RULES.escalation}`],
+  ['Night-shift lead: each stage / shift handover (× score)', '50 / 500'],
   ['Replaying a case or stage', 'only the improvement on your best score'],
   ['Easy question in a skill you already mastered', `${XP_RULES.masteredEasy}`],
   ['Harder question in a mastered skill', `×${XP_RULES.masteredRepeatFactor}`],
@@ -102,9 +103,9 @@ export const THEMES = [
 
 // ------------------------------------------------------------------ badges
 
-const masteredIn = (st, content, track) => {
+const masteredIn = (st, content, track, level) => {
   const idx = E.indexContent(content);
-  const skills = idx.activeSkills.filter((s) => !track || s.track === track);
+  const skills = idx.activeSkills.filter((s) => (!track || s.track === track) && (!level || (s.level ?? 1) === level));
   return { current: skills.filter((s) => E.isMastered(st, content, s.id)).length, target: skills.length };
 };
 const count = (n, target) => ({ current: Math.min(n, target), target });
@@ -127,7 +128,8 @@ export const BADGES = [
   { id: 'quick-study', name: 'Quick Study', icon: 'bolt', description: 'Master a skill without missing a single question in it.', progress: (g) => count(g.counters.cleanMasteries, 1) },
   { id: 'host-hardened', name: 'Host Hardened', icon: 'host', title: 'Host Hardener', description: 'Master every Host basics skill.', progress: (g, st, c) => masteredIn(st, c, 'host') },
   { id: 'packet-whisperer', name: 'Packet Whisperer', icon: 'network', title: 'Packet Whisperer', description: 'Master every Network basics skill.', progress: (g, st, c) => masteredIn(st, c, 'network') },
-  { id: 'foundation', name: 'Foundation Laid', icon: 'layers', description: 'Master all Level 1 skills.', progress: (g, st, c) => masteredIn(st, c) },
+  { id: 'foundation', name: 'Foundation Laid', icon: 'layers', description: 'Master all Level 1 skills.', progress: (g, st, c) => masteredIn(st, c, null, 1) },
+  { id: 'soc-operator', name: 'SOC Operator', icon: 'shield', title: 'SOC Operator', description: 'Master all Level 2 SOC Operations skills.', progress: (g, st, c) => masteredIn(st, c, null, 2) },
   { id: 'gap-closer', name: 'Gap Closer', icon: 'alert', title: 'Gap Closer', description: 'Fix a root gap the tutor identified.', progress: (g) => count(g.counters.gapsClosed, 1) },
   { id: 'second-look', name: 'Second Look', icon: 'review', description: 'Clear 10 missed questions from your review list.', progress: (g) => count(g.counters.reviewCleared, 10) },
   { id: 'daily-duty', name: 'Daily Duty', icon: 'check', description: 'Finish all your due reviews on 5 different days.', progress: (g) => count(g.counters.dailyReviews, 5) },
@@ -151,6 +153,7 @@ export const BADGES = [
   { id: 'grey-area', name: 'Grey Area', icon: 'target', title: 'Grey Area Analyst', description: 'Solve an ambiguous case with 80+ points, calibrated confidence and no harmful next steps.', progress: (g) => count(g.counters.calibratedCalls, 1) },
   { id: 'siem-sleuth', name: 'SIEM Sleuth', icon: 'search', title: 'SIEM Sleuth', description: 'Solve every SIEM investigation case.', progress: (g, st, c) => ({ current: solvedCases(st, c), target: (c.siemCases || []).length || 1 }) },
   { id: 'shift-complete', name: 'Shift Complete', icon: 'flag', title: 'Night Watch', description: 'Finish the First shift capstone with an escalation report.', progress: (g) => count(g.counters.capstonesDone, 1) },
+  { id: 'shift-lead', name: 'Shift Lead', icon: 'flag', title: 'Shift Lead', description: 'Finish the Night-shift lead capstone with a passing handover.', progress: (g, st) => count(st.capstones?.['night-shift-lead']?.completedAt ? 1 : 0, 1) },
   { id: 'clean-handoff', name: 'Clean Handoff', icon: 'check', description: 'Score 85% or more on an escalation report.', progress: (g) => count(g.counters.cleanHandoffs, 1) },
   { id: 'on-watch-1', name: 'On Watch I', icon: 'flame', description: 'Study 3 days in a row.', progress: (g) => count(g.streak.best, 3) },
   { id: 'on-watch-2', name: 'On Watch II', icon: 'flame', description: 'Study 7 days in a row.', progress: (g) => count(g.streak.best, 7) },
@@ -672,10 +675,13 @@ export function onInvestigation(game, st, content, { caseDef, result, firstSolve
 }
 
 /** Call after capstone.recordStage. XP = stage rate × improvement on the best stage score. */
-export function onCapstoneStage(game, st, content, { stage, result, now }) {
+/** Per-scenario XP rates: a capstone may override the defaults with `xp: { stage, report }`. */
+export const capstoneRates = (sc) => ({ stage: sc?.xp?.stage ?? XP_RULES.capstoneStage, report: sc?.xp?.report ?? XP_RULES.escalation });
+
+export function onCapstoneStage(game, st, content, { stage, result, now, scenario }) {
   const streak = touchStreak(game, now);
   const gain = Math.max(0, result.best - result.prevBest);
-  const amount = Math.round((XP_RULES.capstoneStage * gain) / 100);
+  const amount = Math.round((capstoneRates(scenario).stage * gain) / 100);
   const breakdown = amount > 0 ? [{ label: `Stage "${stage.title}" ${result.score}%`, amount }] : [];
   const changes = commit(game, st, content, now, amount, `${stage.id}: ${breakdown.map((b) => b.label).join('') || 'no new XP'}`);
   return { xp: amount, breakdown, streak, ...changes };
@@ -685,11 +691,11 @@ export function onCapstoneStage(game, st, content, { stage, result, now }) {
 export function onEscalation(game, st, content, { scenario, result, now }) {
   const streak = touchStreak(game, now);
   const gain = Math.max(0, result.best - result.prevBest);
-  const amount = Math.round((XP_RULES.escalation * gain) / 100);
+  const amount = Math.round((capstoneRates(scenario).report * gain) / 100);
   const c = game.counters;
   if (result.firstCompletion) c.capstonesDone += 1;
   if (result.total >= 85 && result.prevBest < 85) c.cleanHandoffs += 1;
-  const breakdown = amount > 0 ? [{ label: `Escalation report ${result.total}/100`, amount }] : [];
+  const breakdown = amount > 0 ? [{ label: `${scenario.escalation?.ui?.title || 'Escalation report'} ${result.total}/100`, amount }] : [];
   const changes = commit(game, st, content, now, amount, `${scenario.id} escalation: ${breakdown.map((b) => b.label).join('') || 'no new XP'}`);
   return { xp: amount, breakdown, streak, ...changes };
 }
@@ -718,7 +724,7 @@ export function xpBudget(content) {
   const siem = (content.siemCases || []).reduce((a, c) => a + (XP_RULES.siemCase[c.difficulty] || XP_RULES.siemCase[1]), 0);
   const capstone = (content.scenarios || [])
     .filter((s) => s.kind === 'capstone' && s.status !== 'in-development')
-    .reduce((a, s) => a + s.stages.length * XP_RULES.capstoneStage + (s.escalation ? XP_RULES.escalation : 0), 0);
+    .reduce((a, s) => a + s.stages.length * capstoneRates(s).stage + (s.escalation ? capstoneRates(s).report : 0), 0);
   const foundations = answers + mastery + lessons + misconceptions;
   const operations = siem + capstone;
   const total = foundations + operations;

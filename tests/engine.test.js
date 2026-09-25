@@ -372,8 +372,11 @@ test('placement quiz: one question per skill, seeds mastery, no review entries',
   const st = E.createState(CONTENT);
   const pl = E.startPlacement(st, CONTENT, { rng: fixedRng });
   const idx = E.indexContent(CONTENT);
-  assert.equal(pl.queue.length, idx.activeSkills.length);
-  assert.equal(new Set(pl.queue.map((id) => idx.itemById.get(id).skill)).size, idx.activeSkills.length);
+  const covered = E.placementSkills(CONTENT);
+  assert.equal(covered.length, 13, 'placement covers the Level 1 foundations');
+  assert.ok(covered.every((s) => (s.level ?? 1) === 1));
+  assert.equal(pl.queue.length, covered.length);
+  assert.equal(new Set(pl.queue.map((id) => idx.itemById.get(id).skill)).size, covered.length);
   let i = 0;
   for (;;) {
     const next = E.nextItem(st, CONTENT, { session: 'placement' });

@@ -93,8 +93,16 @@ export function scoreSet(picked, correct) {
   return { credit, right, wrong, missed };
 }
 
+/** Kind of a report field: 'text' (keyword rubric), 'choice' (graded single pick) or 'set' (checkboxes). */
+export function fieldKind(field) {
+  if (field.rubric) return 'text';
+  if (field.credit) return 'choice';
+  return 'set';
+}
+
 /**
- * report: { summary, severity, hosts: [], users: [], timeline: [ids], iocs: [], actions: [] }
+ * report: { summary, severity, hosts: [], users: [], timeline: [ids], iocs: [], actions: [], ... }
+ * Every field named in escalation.weights is scored, in that order (see fieldKind).
  * Returns { total (0-100), passed, rows: [{ field, label, points, max, detail }] }.
  */
 export function scoreEscalation(sc, report) {
@@ -104,22 +112,26 @@ export function scoreEscalation(sc, report) {
   const rows = [];
   const push = (field, credit, detail) => rows.push({ field, label: F[field].label, points: Math.round(credit * W[field]), max: W[field], detail });
 
-  // summary: keyword coverage of the rubric points
-  const text = String(report.summary || '').toLowerCase();
-  const long = text.trim().length >= (F.summary.minLength || 0);
-  const hits = long ? F.summary.rubric.filter((r) => r.any.some((k) => text.includes(k))) : [];
-  push('summary', hits.length / F.summary.rubric.length, {
-    tooShort: !long,
-    hits: hits.map((h) => h.label),
-    misses: F.summary.rubric.filter((r) => !hits.includes(r)).map((r) => r.label),
-  });
-
-  // severity: graded
-  push('severity', F.severity.credit[report.severity] ?? 0, { given: report.severity || null, model: esc.model.severity });
-
-  for (const field of ['hosts', 'users', 'timeline', 'iocs', 'actions']) {
-    const r = scoreSet(report[field], F[field].correct);
-    push(field, r.credit, r);
+  for (const field of Object.keys(W)) {
+    const def = F[field];
+    const kind = fieldKind(def);
+    if (kind === 'text') {
+      // keyword coverage of the rubric points
+      const text = String(report[field] || '').toLowerCase();
+      const long = text.trim().length >= (def.minLength || 0);
+      const hits = long ? def.rubric.filter((r) => r.any.some((k) => text.includes(k))) : [];
+      push(field, hits.length / def.rubric.length, {
+        tooShort: !long,
+        hits: hits.map((h) => h.label),
+        misses: def.rubric.filter((r) => !hits.includes(r)).map((r) => r.label),
+      });
+    } else if (kind === 'choice') {
+      // graded single choice (severity, phase, ...)
+      push(field, def.credit[report[field]] ?? 0, { given: report[field] || null, model: esc.model[field] });
+    } else {
+      const r = scoreSet(report[field], def.correct);
+      push(field, r.credit, r);
+    }
   }
 
   const total = rows.reduce((a, r) => a + r.points, 0);
@@ -128,16 +140,22 @@ export function scoreEscalation(sc, report) {
 
 /** The model answer as a report (it must score 100: see tests). */
 export function modelReport(sc) {
-  const F = sc.escalation.fields;
-  return {
-    summary: sc.escalation.model.summary,
-    severity: sc.escalation.model.severity,
-    hosts: [...F.hosts.correct],
-    users: [...F.users.correct],
-    timeline: [...F.timeline.correct],
-    iocs: [...F.iocs.correct],
-    actions: [...F.actions.correct],
-  };
+  const esc = sc.escalation;
+  const report = {};
+  for (const field of Object.keys(esc.weights)) {
+    const kind = fieldKind(esc.fields[field]);
+    report[field] = kind === 'set' ? [...esc.fields[field].correct] : esc.model[field];
+  }
+  return report;
+}
+
+/** An empty draft for the report form. */
+export function emptyReport(sc) {
+  const esc = sc.escalation;
+  return Object.fromEntries(Object.keys(esc.weights).map((f) => {
+    const kind = fieldKind(esc.fields[f]);
+    return [f, kind === 'text' ? '' : kind === 'choice' ? null : []];
+  }));
 }
 
 /**

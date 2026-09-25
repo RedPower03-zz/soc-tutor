@@ -37,7 +37,7 @@ export const TIERS = [
     short: 'SOC Ops',
     summary: 'Alert triage, SIEM, phishing, malware, incident response and threat hunting.',
     tracks: ['soc'],
-    status: 'coming-soon',
+    status: 'available',
   },
   {
     id: 'l3',
@@ -65,10 +65,10 @@ export const RANKS = [
     gates: [{ type: 'tier', tier: 'l1' }, { type: 'cases', count: 3 }, { type: 'scenario', id: 'first-shift' }],
   },
   // ---- SOC Operations (Level 2)
-  { id: 'tier2-1', title: 'Tier 2 Analyst I', band: 'l2', xp: 9000, gates: [{ type: 'mastered', tier: 'l2', count: 2 }] },
-  { id: 'tier2-2', title: 'Tier 2 Analyst II', band: 'l2', xp: 13000, gates: [{ type: 'mastered', tier: 'l2', count: 4 }] },
-  { id: 'tier2-3', title: 'Tier 2 Analyst III', band: 'l2', xp: 18000, gates: [{ type: 'tier', tier: 'l2' }] },
-  { id: 'senior-1', title: 'Senior Analyst I', band: 'l2', xp: 24000, gates: [{ type: 'tier', tier: 'l2' }, { type: 'scenario', id: 'night-shift-lead', title: 'Night-shift lead capstone' }] },
+  { id: 'tier2-1', title: 'Tier 2 Analyst I', band: 'l2', xp: 7000, gates: [{ type: 'mastered', tier: 'l2', count: 2 }] },
+  { id: 'tier2-2', title: 'Tier 2 Analyst II', band: 'l2', xp: 8500, gates: [{ type: 'mastered', tier: 'l2', count: 4 }] },
+  { id: 'tier2-3', title: 'Tier 2 Analyst III', band: 'l2', xp: 10000, gates: [{ type: 'tier', tier: 'l2' }] },
+  { id: 'senior-1', title: 'Senior Analyst I', band: 'l2', xp: 11500, gates: [{ type: 'tier', tier: 'l2' }, { type: 'scenario', id: 'night-shift-lead', title: 'Night-shift lead capstone' }] },
   // ---- Advanced (Level 3)
   { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 31000, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
   { id: 'responder', title: 'Incident Responder', band: 'l3', xp: 39000, gates: [{ type: 'skills', skills: ['l2-ir', 'l3-forensics'] }] },

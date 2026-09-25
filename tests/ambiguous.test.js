@@ -15,8 +15,9 @@ const goodWriteup = (c) => `${c.writeup.map((w) => w.any[0]).join(', ')}: that i
 const model = (c) => ({ ...S.modelAmbiguous(c), pins: keyPins(c), writeup: goodWriteup(c), queries: c.parQueries });
 const other = (c) => Object.keys(c.defensible).find((v) => v !== c.verdict);
 
-test('3 ambiguous cases, medium and hard, each with a preferred and a second defensible verdict', () => {
-  assert.equal(amb.length, 3);
+test('ambiguous cases (3 in Level 1, 1+ in Level 2), medium and hard, each with a preferred and a second defensible verdict', () => {
+  assert.equal(amb.filter((c) => !c.tier || c.tier === 'l1').length, 3);
+  assert.ok(amb.some((c) => c.tier === 'l2'), 'a Level 2 ambiguous case');
   const diffs = amb.map((c) => c.difficulty);
   assert.ok(diffs.includes(2) && diffs.includes(3), 'a mix of medium and hard');
   assert.ok(diffs.every((d) => d >= 2));
@@ -169,7 +170,7 @@ test('ambiguous cases count toward the SIEM-case rank gates and the XP budget', 
   const b = G.xpBudget(CONTENT);
   assert.equal(b.siem, CONTENT.siemCases.reduce((a, c) => a + G.XP_RULES.siemCase[c.difficulty], 0));
   assert.ok(b.siem >= 780 + amb.reduce((a, c) => a + G.XP_RULES.siemCase[c.difficulty], 0));
-  assert.equal(b.atTotal.rank.id, 'tier1-3', 'still a third of the way up the ladder');
+  assert.equal(b.atTotal.rank.id, G.reachableRank(CONTENT).id, 'the budget reaches the top rank the content opens');
 });
 
 test('ambiguous cases unlock from their Level 1 skills', () => {

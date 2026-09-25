@@ -4,14 +4,15 @@ import assert from 'node:assert/strict';
 import { CONTENT } from '../content/index.js';
 
 const { skills, items, lessons, misconceptions, scenarios } = CONTENT;
-const level1 = skills.filter((s) => !s.comingSoon);
+const active = skills.filter((s) => !s.comingSoon);
+const level1 = active.filter((s) => (s.level ?? 1) === 1);
 const lessonBySkill = new Map(lessons.map((l) => [l.skill, l]));
 const misById = new Map(misconceptions.map((m) => [m.id, m]));
 const allText = (l) => JSON.stringify(l);
 
-test('every Level 1 skill has a lesson with 3-6 sections, a worked example and a faded example', () => {
+test('every live skill has a lesson with 3-6 sections, a worked example and a faded example', () => {
   assert.equal(level1.length, 13);
-  for (const s of level1) {
+  for (const s of active) {
     const l = lessonBySkill.get(s.id);
     assert.ok(l, `${s.id}: no lesson`);
     assert.ok(l.title && l.goal, `${s.id}: lesson needs a title and goal`);
@@ -32,7 +33,7 @@ test('every Level 1 skill has a lesson with 3-6 sections, a worked example and a
       assert.ok(f.todo.length >= 1, `${s.id}/${f.id}: nothing left for the student to do`);
     }
   }
-  assert.equal(lessons.length, level1.length, 'no lessons for unknown or planned skills');
+  assert.equal(lessons.length, active.length, 'no lessons for unknown or planned skills');
 });
 
 test('section ids are unique per lesson; example ids are unique overall', () => {
@@ -67,7 +68,7 @@ test('faded example steps have valid answers', () => {
 
 test('misconception catalog: complete entries, real skills, lesson links resolve', () => {
   assert.equal(misById.size, misconceptions.length, 'duplicate misconception id');
-  const skillIds = new Set(level1.map((s) => s.id));
+  const skillIds = new Set(active.map((s) => s.id));
   for (const m of misconceptions) {
     assert.ok(m.name && m.description && m.fix, `${m.id}: needs name, description and fix`);
     assert.ok(skillIds.has(m.skill), `${m.id}: unknown skill ${m.skill}`);
@@ -78,7 +79,7 @@ test('misconception catalog: complete entries, real skills, lesson links resolve
       assert.ok(l.sections.some((s) => s.id === sec), `${m.id}: lesson link to unknown section ${m.lesson}`);
     }
   }
-  for (const s of level1) assert.ok(misconceptions.filter((m) => m.skill === s.id).length >= 2, `${s.id}: needs at least 2 misconceptions`);
+  for (const s of active) assert.ok(misconceptions.filter((m) => m.skill === s.id).length >= 2, `${s.id}: needs at least 2 misconceptions`);
 });
 
 test('item misconception tags reference real ids and real answers', () => {

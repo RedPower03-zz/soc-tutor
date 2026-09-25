@@ -436,7 +436,7 @@ function renderHome() {
         cls: 'welcome',
         body: `<p class="lead">Train like a SOC analyst, starting with host and network basics.</p>
           <p class="muted">Each skill starts with a short lesson and worked examples, then practice. The tutor adapts as you go: it re-asks what you miss, targets misconceptions and digs into the building blocks behind your mistakes.</p>
-          <p class="muted small">Know some of this already? Run the placement check: one question per skill (${idx.activeSkills.length} total). You can stop at any time.</p>
+          <p class="muted small">Know some of this already? Run the placement check: one question per Level 1 skill (${E.placementSkills(CONTENT).length} total). You can stop at any time.</p>
           <button class="btn primary" data-action="placement">${icon('target')}Run placement check</button>
           <button class="btn secondary" data-action="skip-placement">${icon('play')}Start from the basics</button>`,
       })
@@ -951,7 +951,7 @@ function renderQuestion() {
           <p class="hint">Recognising the domain tells you which knowledge to reach for.</p>
           <div class="choices">${current.areaChoices
             .map(
-              (sid, i) => `<button class="choice" data-action="recognize" data-skill="${sid}"><span class="key">${String.fromCharCode(65 + i)}</span><span class="choice-text">${esc(skillName(sid))}<span class="choice-sub">${esc(idx.skillById.get(sid)?.track === 'host' ? 'Host' : 'Network')}</span></span></button>`,
+              (sid, i) => `<button class="choice" data-action="recognize" data-skill="${sid}"><span class="key">${String.fromCharCode(65 + i)}</span><span class="choice-text">${esc(skillName(sid))}<span class="choice-sub">${esc({ host: 'Host', network: 'Network', soc: 'SOC operations', advanced: 'Advanced' }[idx.skillById.get(sid)?.track] || 'Skill')}</span></span></button>`,
             )
             .join('')}</div>
         </div>
