@@ -8,8 +8,9 @@ import { MALWARE } from './malware.js';
 import { ATTACK } from './attack.js';
 import { IR } from './ir.js';
 import { HUNTING } from './hunting.js';
+import { VULN } from './vuln.js';
 
-const PARTS = [TRIAGE, SIEM, PHISHING, MALWARE, ATTACK, IR, HUNTING];
+const PARTS = [TRIAGE, SIEM, PHISHING, MALWARE, ATTACK, IR, HUNTING, VULN];
 
 export const L2 = {
   track: L2_TRACK,

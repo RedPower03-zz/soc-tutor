@@ -70,10 +70,10 @@ export const RANKS = [
   { id: 'tier2-3', title: 'Tier 2 Analyst III', band: 'l2', xp: 10000, gates: [{ type: 'tier', tier: 'l2' }] },
   { id: 'senior-1', title: 'Senior Analyst I', band: 'l2', xp: 11500, gates: [{ type: 'tier', tier: 'l2' }, { type: 'scenario', id: 'night-shift-lead', title: 'Night-shift lead capstone' }] },
   // ---- Advanced (Level 3)
-  { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 16000, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
-  { id: 'responder', title: 'Incident Responder', band: 'l3', xp: 17000, gates: [{ type: 'skills', skills: ['l2-ir', 'l3-forensics'] }] },
-  { id: 'hunter', title: 'Threat Hunter', band: 'l3', xp: 18500, gates: [{ type: 'skills', skills: ['l2-hunting', 'l3-identity'] }] },
-  { id: 'detection', title: 'Detection Engineer', band: 'l3', xp: 20500, gates: [{ type: 'skills', skills: ['l2-siem', 'l3-detection'] }] },
-  { id: 'lead', title: 'SOC Lead', band: 'l3', xp: 23000, gates: [{ type: 'tier', tier: 'l3' }] },
-  { id: 'manager', title: 'SOC Manager', band: 'l3', xp: 26000, gates: [{ type: 'all-tiers' }, { type: 'scenario', id: 'major-incident', title: 'Major incident capstone' }] },
+  { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 17000, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
+  { id: 'responder', title: 'Incident Responder', band: 'l3', xp: 18000, gates: [{ type: 'skills', skills: ['l2-ir', 'l3-forensics'] }] },
+  { id: 'hunter', title: 'Threat Hunter', band: 'l3', xp: 19500, gates: [{ type: 'skills', skills: ['l2-hunting', 'l3-identity'] }] },
+  { id: 'detection', title: 'Detection Engineer', band: 'l3', xp: 21500, gates: [{ type: 'skills', skills: ['l2-siem', 'l3-detection'] }] },
+  { id: 'lead', title: 'SOC Lead', band: 'l3', xp: 24000, gates: [{ type: 'tier', tier: 'l3' }] },
+  { id: 'manager', title: 'SOC Manager', band: 'l3', xp: 27000, gates: [{ type: 'all-tiers' }, { type: 'scenario', id: 'major-incident', title: 'Major incident capstone' }] },
 ];

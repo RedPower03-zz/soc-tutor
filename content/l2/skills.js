@@ -7,7 +7,7 @@
 export const L2_TRACK = {
   id: 'soc',
   name: 'SOC operations (Level 2)',
-  description: 'Real analyst workflows built on the basics: triage, SIEM, phishing, malware, ATT&CK, incident response and hunting.',
+  description: 'Real analyst workflows built on the basics: triage, SIEM, phishing, malware, ATT&CK, incident response, hunting and vulnerability management.',
   comingSoon: false,
 };
 
@@ -74,5 +74,14 @@ export const L2_SKILLS = [
     order: 26,
     prereqs: ['l2-siem', 'l2-malware', 'l2-attack'],
     summary: 'Hypothesis-driven hunts, stack counting, beacon hunting and turning hunts into detections.',
+  },
+  {
+    id: 'l2-vuln',
+    name: 'Vulnerability management',
+    track: 'soc',
+    level: 2,
+    order: 27,
+    prereqs: ['net-ports', 'l2-alert-triage'],
+    summary: 'Scanner output, CVE/CWE, CVSS v3.1/v4 vectors, EPSS and KEV, risk-based priority, exceptions, SLAs and verified fixes.',
   },
 ];

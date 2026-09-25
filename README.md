@@ -214,6 +214,7 @@ Level 2 is built to the same standard as Level 1. Each skill has a lesson (4–5
 | MITRE ATT&CK & attack chains (`l2-attack`) | Alert triage | Tactics vs techniques, technique IDs (e.g. T1566, T1059.001, T1003.001), mapping an attack chain, coverage is not a checkbox (reflects ATT&CK v19) |
 | Incident response (`l2-ir`) | Alert triage | NIST SP 800-61 phases (Rev. 2 lifecycle, Rev. 3 / CSF 2.0 mapping), scoping before eradication, order of volatility (RFC 3227), credentials, communication |
 | Threat hunting (`l2-hunting`) | SIEM, Malware, ATT&CK | Hypothesis-driven hunting, baselines and stacking, "found nothing" is still a result, beyond IOCs to behaviours |
+| Vulnerability management (`l2-vuln`) | Ports & services, Alert triage | Reading scanner reports, CVE vs CWE, CVSS v3.1 / v4.0 vectors, EPSS and CISA KEV, prioritising by exposure and asset criticality, scan false positives, credentialed vs unauthenticated scans, patch vs compensating control, exceptions and SLAs, verifying remediation, reporting; light ASM / cloud-posture extension (30+ questions) |
 
 **Level 2 SIEM cases** (`content/l2/siem-cases.js`) open once you have learned the Level 2 skills they rely on. They add two new log sources, *Mail gateway* and *Malware sandbox*:
 
@@ -407,12 +408,12 @@ Levels 1 and 2 alone are worth 12,355 XP (Senior Analyst I, rank 10); Level 1 al
 | 8 | Tier 2 Analyst II | 8,500 | 4 Level 2 skills mastered |
 | 9 | Tier 2 Analyst III | 10,000 | All Level 2 skills |
 | 10 | Senior Analyst I | 11,500 | All Level 2 + *Night-shift lead* capstone |
-| 11 | Senior Analyst II | 16,000 | 2 Level 3 skills mastered |
-| 12 | Incident Responder | 17,000 | Incident response + Digital forensics |
-| 13 | Threat Hunter | 18,500 | Threat hunting + Identity/AD & Kerberos |
-| 14 | Detection Engineer | 20,500 | SIEM queries + Detection engineering |
-| 15 | SOC Lead | 23,000 | All Level 3 skills |
-| 16 | SOC Manager | 26,000 | Every tier + *Major incident* capstone |
+| 11 | Senior Analyst II | 17,000 | 2 Level 3 skills mastered |
+| 12 | Incident Responder | 18,000 | Incident response + Digital forensics |
+| 13 | Threat Hunter | 19,500 | Threat hunting + Identity/AD & Kerberos |
+| 14 | Detection Engineer | 21,500 | SIEM queries + Detection engineering |
+| 15 | SOC Lead | 24,000 | All Level 3 skills |
+| 16 | SOC Manager | 27,000 | Every tier + *Major incident* capstone |
 
 The dashboard **Operator** panel shows your rank insignia (chevrons for the sub-step; bars and stars for the band), a ladder strip with the three tiers, and a **Next rank** checklist with a progress bar for each requirement. **Career ladder** opens the full view: where you are, the curriculum tiers with their tracks, and every rank with its requirements and what it unlocks.
 
