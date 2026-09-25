@@ -24,7 +24,7 @@ export const XP_RULES = {
   masteredRepeatFactor: 0.5, // harder questions in an already-mastered skill earn half
   reviewCorrect: 8, // bonus for getting a previously missed question right
   reviewCleared: 10, // a missed question fully cleared from the review list
-  dailyReviewComplete: 30, // once per day: you finished all due reviews while some were due
+  dailyReviewComplete: 30, // once per day: you finished all of the day's due long-term reviews (Daily review)
   skillMastered: 100, // first time you master a skill
   rootGapClosed: 75, // a root gap found by the tutor is fixed
   sureCorrect: 5, // confidence rated "Sure" and right (calibration)
@@ -120,13 +120,12 @@ export const BADGES = [
   { id: 'gap-closer', name: 'Gap Closer', icon: 'alert', title: 'Gap Closer', description: 'Fix a root gap the tutor identified.', progress: (g) => count(g.counters.gapsClosed, 1) },
   { id: 'second-look', name: 'Second Look', icon: 'review', description: 'Clear 10 missed questions from your review list.', progress: (g) => count(g.counters.reviewCleared, 10) },
   { id: 'daily-duty', name: 'Daily Duty', icon: 'check', description: 'Finish all your due reviews on 5 different days.', progress: (g) => count(g.counters.dailyReviews, 5) },
-  { id: 'myth-buster', name: 'Myth Buster', icon: 'x', title: 'Myth Buster', needs: 'misconception checks', description: 'Resolve 5 misconceptions.', progress: (g) => count(g.counters.misconceptionsResolved, 5) },
+  { id: 'myth-buster', name: 'Myth Buster', icon: 'x', title: 'Myth Buster', description: 'Resolve 5 misconceptions.', progress: (g) => count(g.counters.misconceptionsResolved, 5) },
   {
     id: 'calibrated',
     name: 'Calibrated',
     icon: 'gauge',
     title: 'Calibrated',
-    needs: 'confidence ratings',
     description: 'Be right on 80%+ of the answers you mark "Sure" (at least 20 Sure answers).',
     progress: (g) => {
       const { sureTotal, sureCorrect } = g.counters;
@@ -289,13 +288,13 @@ export function gateText(rank, content) {
   const gate = rank.gate;
   if (!gate) return '';
   const idx = E.indexContent(content);
-  if (gate.capstone) return 'and the SOC capstone (coming later)';
+  if (gate.capstone) return 'and the First shift capstone (Round 2)';
   if (gate.mastered != null) return `and ${gate.mastered} skills mastered`;
   if (gate.allLevel1) return 'and every Level 1 skill mastered';
   if (gate.skills) {
     const names = gate.skills.map((id) => idx.skillById.get(id)?.name || id);
     const available = gate.skills.every((id) => idx.activeIds.has(id));
-    return `and ${names.join(' + ')} mastered${available ? '' : ' (Level 2+, coming soon)'}`;
+    return `and ${names.join(' + ')} mastered${available ? '' : ' (Level 2+ content)'}`;
   }
   return '';
 }
@@ -475,6 +474,9 @@ export function onAnswer(game, st, content, ev) {
       const ss = st.skills[e.skillId];
       if (ss && ss.correct === ss.attempts) c.cleanMasteries += 1;
       add('Skill mastered', XP_RULES.skillMastered);
+    } else if (e.type === 'misconception-resolved') {
+      c.misconceptionsResolved += 1;
+      add('Misconception resolved', XP_RULES.misconceptionResolved);
     } else if (e.type === 'gap-resolved') {
       c.gapsClosed += 1;
       add('Root gap closed', XP_RULES.rootGapClosed);
@@ -485,7 +487,7 @@ export function onAnswer(game, st, content, ev) {
     }
   }
 
-  if (mode === 'review' && dueAfter === 0 && game.daily.reviewBonusDay !== today) {
+  if (mode === 'daily' && dueAfter === 0 && game.daily.reviewBonusDay !== today) {
     game.daily.reviewBonusDay = today;
     c.dailyReviews += 1;
     add("Today's due reviews complete", XP_RULES.dailyReviewComplete);

@@ -176,6 +176,11 @@ test('item selection never repeats the previous item (real content, random answe
   for (let i = 0; i < 400; i++) {
     const next = E.nextItem(st, CONTENT, { rng });
     assert.ok(next, 'always has a next item');
+    if (next.mode === 'lesson') {
+      // lessons come first for new skills; this test is about question selection
+      E.markLesson(st, CONTENT, next.skillId, next.offer ? 'offered' : 'skip');
+      continue;
+    }
     assert.notEqual(next.item.id, prev, `turn ${i}: ${next.item.id} repeated immediately`);
     prev = next.item.id;
     answer(st, CONTENT, next, rng() < 0.7);

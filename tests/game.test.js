@@ -81,11 +81,11 @@ test('daily review bonus: once per day, only when the due reviews are finished',
   const { st, game } = fresh();
   const it = itemOf('net-dns', 2, 'mc');
   const bonus = (r) => r.breakdown.some((b) => b.amount === G.XP_RULES.dailyReviewComplete);
-  assert.equal(bonus(answer(game, st, it, true, { mode: 'review', dueAfter: 2 })), false, 'still items due');
-  assert.equal(bonus(answer(game, st, it, true, { mode: 'learn', dueAfter: 0 })), false, 'not a review');
-  assert.equal(bonus(answer(game, st, it, true, { mode: 'review', dueAfter: 0 })), true);
-  assert.equal(bonus(answer(game, st, it, true, { mode: 'review', dueAfter: 0 })), false, 'only once a day');
-  assert.equal(bonus(answer(game, st, it, true, { mode: 'review', dueAfter: 0, now: DAY1 + 86400000 })), true, 'again tomorrow');
+  assert.equal(bonus(answer(game, st, it, true, { mode: 'daily', dueAfter: 2 })), false, 'still items due');
+  assert.equal(bonus(answer(game, st, it, true, { mode: 'learn', dueAfter: 0 })), false, 'not the daily review');
+  assert.equal(bonus(answer(game, st, it, true, { mode: 'daily', dueAfter: 0 })), true);
+  assert.equal(bonus(answer(game, st, it, true, { mode: 'daily', dueAfter: 0 })), false, 'only once a day');
+  assert.equal(bonus(answer(game, st, it, true, { mode: 'daily', dueAfter: 0, now: DAY1 + 86400000 })), true, 'again tomorrow');
 });
 
 test('confidence: "Sure" and right earns a calibration bonus; wrong "Sure" earns only the attempt', () => {
@@ -133,7 +133,7 @@ test('rank ladder: XP thresholds plus mastery gates', () => {
   assert.equal(rank(), 'tier1', 'Tier 2 needs all of Level 1');
   idx.activeSkills.forEach((s) => master(st, s.id));
   assert.equal(rank(), 'tier2', 'higher ranks need Level 2+ content that is not built yet');
-  assert.match(G.gateText(G.RANKS.find((r) => r.id === 'responder'), CONTENT), /coming soon/);
+  assert.match(G.gateText(G.RANKS.find((r) => r.id === 'responder'), CONTENT), /Level 2\+ content/);
 });
 
 test('rank-ups are reported once and unlock themes; titles and themes can be equipped only when earned', () => {
@@ -286,14 +286,14 @@ test('mastery badges: Certified, Quick Study, Host Hardened, Packet Whisperer, F
   assert.ok(game.badges['packet-whisperer'] && game.badges.foundation);
 });
 
-test('Gap Closer, Second Look and Daily Duty come from engine events', () => {
+test('Gap Closer, Second Look and Daily Duty (daily review sessions) come from engine events', () => {
   const { st, game } = fresh();
   const it = itemOf('net-ip', 2);
   answer(game, st, it, true, { events: [{ type: 'gap-resolved', skillId: 'net-ip' }] });
   assert.ok(game.badges['gap-closer']);
   for (let i = 0; i < 10; i++) answer(game, st, it, true, { mode: 'review', events: [{ type: 'review-cleared' }] });
   assert.ok(game.badges['second-look']);
-  for (let d = 0; d < 5; d++) answer(game, st, it, true, { mode: 'review', dueAfter: 0, now: DAY1 + d * 86400000 });
+  for (let d = 0; d < 5; d++) answer(game, st, it, true, { mode: 'daily', dueAfter: 0, now: DAY1 + d * 86400000 });
   assert.ok(game.badges['daily-duty']);
 });
 

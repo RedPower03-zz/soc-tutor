@@ -2,12 +2,41 @@
 import { CONTENT } from '../content/index.js';
 import * as E from './engine.js';
 import * as G from './game.js';
+import * as S from './scheduler.js';
 import { loadState, saveState, clearState, newState } from './storage.js';
 import { icon } from './icons.js';
 
 const app = document.getElementById('app');
 const idx = E.indexContent(CONTENT);
+
+// ------------------------------------------------------------------ clock (injectable for testing)
+// ?debugDays=N shifts the app clock N days forward (stored so reloads keep it; ?debugDays=0 resets).
+// Used to check the daily review queue and mastery decay without waiting.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const OFFSET_KEY = 'soc-tutor:debug-days';
+(() => {
+  const q = new URLSearchParams(location.search).get('debugDays');
+  if (q != null) {
+    try {
+      if (Number(q)) localStorage.setItem(OFFSET_KEY, String(Number(q)));
+      else localStorage.removeItem(OFFSET_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+})();
+function debugDays() {
+  try {
+    return Number(localStorage.getItem(OFFSET_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+const now = () => Date.now() + debugDays() * DAY_MS;
+
 let state = loadState(CONTENT);
+E.applyDecay(state, CONTENT, now());
+saveState(state); // persist any migration straight away
 applyTheme();
 
 // session: { type: 'auto' | 'review' | 'skill' | 'placement', skillId? }
@@ -24,12 +53,21 @@ const MODE = {
   practice: ['Practice', 'ok'],
   skill: ['Skill drill', 'info'],
   placement: ['Placement', 'info'],
+  followup: ['Follow-up', 'crit'],
+  mixed: ['Mixed', 'info'],
+  daily: ['Daily review', 'warn'],
+};
+const CONF = {
+  guess: ['Guess', 'I\'m guessing'],
+  unsure: ['Unsure', 'I think so'],
+  sure: ['Sure', 'I know this'],
 };
 const STATUS = {
   mastered: ['Mastered', 'ok'],
   learning: ['In progress', 'info'],
   new: ['Ready', 'ready'],
   gap: ['Gap', 'crit'],
+  fading: ['Refresh', 'warn'],
   locked: ['Locked', 'dim'],
   'coming-soon': ['Planned', 'dim'],
 };
@@ -39,6 +77,7 @@ const NOTE = {
   gap: ['Gap detected', 'crit', 'alert'],
   return: ['Returning', 'ok', 'ret'],
   info: ['Status', 'ok', 'award'],
+  misconception: ['Misconception check', 'crit', 'target'],
 };
 const EVENT = {
   'review-added': ['Queued', 'warn'],
@@ -53,6 +92,10 @@ const EVENT = {
   return: ['Return', 'info'],
   mastered: ['Mastered', 'ok'],
   unlocked: ['Unlocked', 'ok'],
+  'review-guess': ['Recheck', 'warn'],
+  'confident-error': ['Flag', 'crit'],
+  misconception: ['Myth', 'crit'],
+  'misconception-resolved': ['Busted', 'ok'],
 };
 const TRACK_ICON = { host: 'host', network: 'network', soc: 'radar' };
 const TRACK_CODE = { host: 'HST', network: 'NET', soc: 'SOC' };
@@ -72,9 +115,11 @@ for (const t of CONTENT.tracks) {
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
-/** Escapes text and turns `backticks` into <code>. */
+/** Escapes text and turns `backticks` into <code> and **stars** into <b>. */
 function rich(s) {
-  return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
+  return esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 }
 /** Engine messages may contain emoji; the command-center look uses text tags instead. */
 function plainText(s) {
@@ -220,7 +265,6 @@ function renderProfile() {
               ? '<div class="bd-meta muted">Locked</div>'
               : `<div class="bd-prog">${bar(p.current / p.target)}<span class="mono">${p.text ? esc(p.text) : `${p.current}/${p.target}`}</span></div>`
         }
-        ${b.needs && !b.earned ? `<div class="bd-needs">Unlocks with ${esc(b.needs)} (coming soon)</div>` : ''}
         ${b.title && !secret ? `<div class="bd-title">${icon('tag')}Title: ${esc(b.title)}</div>` : ''}
       </li>`;
   };
@@ -409,6 +453,8 @@ function renderHome() {
   const firstVisit = state.turn === 0 && !state.placement?.done;
   const top = state.focus[state.focus.length - 1];
   const openGaps = Object.values(state.gaps).filter((g) => !g.resolved).length;
+  const dueNow = E.dailyDue(state, CONTENT, now()).length;
+  const nextDue = nextDueText();
 
   const welcome = firstVisit
     ? panel({
@@ -417,7 +463,7 @@ function renderHome() {
         hud: true,
         cls: 'welcome',
         body: `<p class="lead">Train like a SOC analyst, starting with host and network basics.</p>
-          <p class="muted">The tutor adapts as you go: it re-asks what you miss and digs into the building blocks behind your mistakes.</p>
+          <p class="muted">Each skill starts with a short lesson and worked examples, then practice. The tutor adapts as you go: it re-asks what you miss, targets misconceptions and digs into the building blocks behind your mistakes.</p>
           <p class="muted small">Know some of this already? Run the placement check: one question per skill (${idx.activeSkills.length} total). You can stop at any time.</p>
           <button class="btn primary" data-action="placement">${icon('target')}Run placement check</button>
           <button class="btn secondary" data-action="skip-placement">${icon('play')}Start from the basics</button>`,
@@ -458,12 +504,16 @@ function renderHome() {
       </div>
       <div class="stats">
         <div class="stat"><b class="mono">${pad(prog.answered, 3)}</b><span>Answered</span></div>
-        <div class="stat ${prog.reviewCount ? 'warn' : ''}"><b class="mono">${pad(prog.reviewCount)}</b><span>To review</span></div>
+        <div class="stat ${dueNow ? 'warn' : ''}"><b class="mono">${pad(dueNow)}</b><span>Due today</span></div>
         <div class="stat ${openGaps ? 'crit' : ''}"><b class="mono">${pad(openGaps)}</b><span>Open gaps</span></div>
       </div>
       ${firstVisit ? '' : `<button class="btn primary" data-action="continue">${icon('play')}${prog.answered ? 'Continue learning' : 'Start learning'}</button>`}
-      <button class="btn secondary warn" data-action="review" ${prog.reviewCount ? '' : 'disabled'}>
-        ${icon('review')}Review missed items<span class="count">${pad(prog.reviewCount)}</span>
+      <button class="btn secondary warn" data-action="daily" ${dueNow ? '' : 'disabled'}>
+        ${icon('calendar')}Daily review<span class="count">${dueNow ? `${pad(dueNow)} due` : 'Clear'}</span>
+      </button>
+      ${dueNow ? '' : `<p class="btn-note">${esc(nextDue)}</p>`}
+      <button class="btn secondary" data-action="review" ${prog.reviewCount ? '' : 'disabled'}>
+        ${icon('review')}Missed this session<span class="count">${pad(prog.reviewCount)}</span>
       </button>
       <button class="btn secondary" data-action="report">${icon('chart')}Gap report</button>`,
   });
@@ -486,9 +536,11 @@ function renderHome() {
     ${focusBanner}
     ${firstVisit ? '' : operatorPanel()}
     ${hero}
+    ${firstVisit ? '' : operationsPanel()}
     ${panel({ title: 'Skill map', icon: 'grid', meta: 'Tap a skill to drill it', cls: 'skillmap', body: tracks })}
     <footer class="footer">
       <p>Progress is saved in this browser on this device.</p>
+      ${debugDays() ? `<p class="warn-text">Debug clock: +${debugDays()} days (open with ?debugDays=0 to reset)</p>` : ''}
       <button class="btn danger" data-action="reset">${icon('reset')}Reset progress</button>
     </footer>
   `);
@@ -497,9 +549,18 @@ function renderHome() {
 function renderSkillRow(s) {
   const status = E.skillStatus(state, CONTENT, s.id);
   const ss = state.skills[s.id];
-  const clickable = ['new', 'learning', 'gap', 'mastered'].includes(status);
+  const clickable = ['new', 'learning', 'gap', 'mastered', 'fading'].includes(status);
   const needs = s.prereqs.length ? `Req: ${s.prereqs.map((p) => esc(skillName(p))).join(', ')}` : 'No prerequisites';
   const p = ss && ss.attempts ? ss.p : 0; // untouched skills show an empty bar
+  const lesson = E.lessonFor(CONTENT, s.id);
+  const ls = E.lessonState(state, s.id);
+  const lessonBtn = lesson
+    ? `<button class="skill-lesson ${ls.completed ? 'done' : ''}" data-action="open-lesson" data-skill="${s.id}" aria-label="Lesson: ${esc(s.name)}${ls.completed ? ' (completed)' : ''}" title="Lesson">${icon('book')}<span>${ls.completed ? 'Done' : 'Lesson'}</span></button>`
+    : '';
+  return `<div class="skill-wrap">${skillButton(s, status, ss, clickable, needs, p)}${lessonBtn}</div>`;
+}
+
+function skillButton(s, status, ss, clickable, needs, p) {
   return `<button class="skill s-${status}" ${clickable ? `data-action="skill" data-skill="${s.id}"` : 'disabled'} aria-label="${esc(s.name)}: ${STATUS[status][0]}">
       <span class="sk-code">${SKILL_CODE[s.id]}</span>
       <span class="sk-main">
@@ -514,21 +575,62 @@ function renderSkillRow(s) {
     </button>`;
 }
 
+function nextDueText() {
+  const next = S.nextDueAt(state);
+  if (next == null) return 'Daily review fills up as you answer questions.';
+  const days = Math.round((S.startOfDay(next) - S.startOfDay(now())) / DAY_MS);
+  if (days <= 0) return 'Next review: later today.';
+  if (days === 1) return 'Next review: tomorrow.';
+  return `Next review: in ${days} days (${new Date(next).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}).`;
+}
+
+/** Navigation slot for practice modes and scenario content (mixed practice now; SIEM mode and capstone later). */
+function operationsPanel() {
+  const learned = E.learnedSkills(state, CONTENT);
+  const minL = E.PARAMS.interleaveMinLearned;
+  const rows = CONTENT.scenarios
+    .map((sc) => {
+      if (sc.kind === 'mixed') {
+        const ok = learned.length >= minL;
+        return `<li class="op-row ${ok ? '' : 'locked'}">
+          <span class="op-ico">${icon('shuffle')}</span>
+          <span class="op-body"><b>${esc(sc.title)}</b><em>${ok ? `Evidence from your ${learned.length} learned skills, shuffled.` : `Unlocks when you have learned ${minL} skills (${learned.length}/${minL}).`}</em></span>
+          <button class="btn mini ${ok ? 'primary' : ''}" data-action="mixed" ${ok ? '' : 'disabled'}>${ok ? 'Start' : icon('lock')}</button>
+        </li>`;
+      }
+      const stages = sc.stages || [];
+      const unlocked = stages.filter((st) => (st.requires?.lessons || []).every((sid) => E.lessonState(state, sid).completed || E.lessonState(state, sid).bypassed)).length;
+      return `<li class="op-row locked">
+          <span class="op-ico">${icon(sc.kind === 'capstone' ? 'flag' : 'search')}</span>
+          <span class="op-body"><b>${esc(sc.title)}</b><em>${esc(sc.summary)}</em>
+            ${stages.length ? `<span class="op-stages">${stages.map((st, i) => `<i class="${i < unlocked ? 'on' : ''}" title="${esc(st.title)}"></i>`).join('')}<span>${unlocked}/${stages.length} stages unlocked by lessons</span></span>` : ''}</span>
+          ${chip(['Round 2', 'dim'])}
+        </li>`;
+    })
+    .join('');
+  return panel({ title: 'Operations', icon: 'target', meta: 'Practice modes', cls: 'ops', body: `<ul class="op-list">${rows}</ul>` });
+}
+
 // ------------------------------------------------------------------ sessions
 
 function startSession(s) {
   session = s;
+  lessonView = null;
+  if (E.applyDecay(state, CONTENT, now()).length) save();
   showNext();
 }
 
 function showNext() {
-  const next = E.nextItem(state, CONTENT, { session: session.type, skillId: session.skillId });
+  const next = E.nextItem(state, CONTENT, { session: session.type, skillId: session.skillId, now: now() });
   save();
   if (!next) {
     if (session.type === 'placement') return finishPlacement(false);
     if (session.type === 'review') return renderDone('Review queue clear', 'All caught up. No missed questions are waiting for review right now.');
+    if (session.type === 'daily') return renderDone('Daily review complete', `Nothing else is due today. ${nextDueText()}`, { continueLabel: 'Continue learning' });
+    if (session.type === 'mixed') return renderDone('Mixed practice locked', `Learn at least ${E.PARAMS.interleaveMinLearned} skills to unlock mixed practice.`);
     return renderHome();
   }
+  if (next.mode === 'lesson') return openLesson(next.skillId, { gate: true, offer: next.offer, note: next.note });
   const { item } = next;
   current = {
     ...next,
@@ -536,14 +638,324 @@ function showNext() {
     selected: new Set(),
     answered: false,
     result: null,
+    confidence: null,
+    recognized: !next.recognize,
+    areaChoices: next.recognize ? areaChoices(item) : null,
   };
   renderQuestion();
 }
 
-function snippetHtml(text) {
+/** Four skill names for "Which area does this evidence involve?": the right one plus distractors, learned skills first. */
+function areaChoices(item) {
+  const learned = E.learnedSkills(state, CONTENT).filter((id) => id !== item.skill);
+  const others = idx.activeSkills.map((s) => s.id).filter((id) => id !== item.skill && !learned.includes(id));
+  const distract = [...shuffle(learned), ...shuffle(others)].slice(0, 3);
+  return shuffle([item.skill, ...distract]);
+}
+
+// ------------------------------------------------------------------ lessons
+
+// { skillId, gate, offer, stage: 'offer'|'read'|'worked'|'faded', i, step, todo, answered, response, correct, order, results, snapshot, note }
+let lessonView = null;
+
+function openLesson(skillId, { gate = false, offer = false, section = null, fromQuestion = false, note = null, returnTo = null } = {}) {
+  const lesson = E.lessonFor(CONTENT, skillId);
+  if (!lesson) return;
+  lessonView = {
+    skillId,
+    gate,
+    offer,
+    note,
+    stage: offer ? 'offer' : 'read',
+    i: 0,
+    step: 1,
+    section,
+    returnTo,
+    snapshot: fromQuestion ? { html: app.innerHTML, y: window.scrollY, value: document.getElementById('answer-text')?.value ?? null } : null,
+  };
+  renderLessonView();
+}
+
+function awardLearning(events) {
+  for (const e of events) {
+    const r = G.onLearningEvent(state.game, state, CONTENT, { type: e.type, now: now() });
+    xpToast(r.xp);
+    queueAchievements(r);
+  }
+  save();
+  refreshStatusXp();
+}
+
+function lessonMinutes(lesson) {
+  const words = JSON.stringify(lesson.sections).split(/\s+/).length;
+  return Math.max(2, Math.round(words / 180));
+}
+
+function lessonHeader(lesson, stage) {
+  const ls = E.lessonState(state, lesson.skill);
+  const workedDone = lesson.worked.every((w) => (ls.worked || []).includes(w.id));
+  const fadedDone = lesson.faded.every((f) => (ls.faded || []).includes(f.id));
+  const steps = [
+    ['read', 'Concept', ls.read],
+    ['worked', 'Worked', workedDone],
+    ['faded', 'Your turn', fadedDone],
+  ];
+  return `${statusBar()}
+    <header class="qbar">
+      <button class="icon-btn" data-action="lesson-exit" aria-label="${lessonView.snapshot ? 'Back to question' : 'Close lesson'}">${icon(lessonView.snapshot ? 'back' : 'x')}</button>
+      <div class="qbar-mid">${chip(['Lesson', 'info'], 'mode')}<span class="skill-label">${esc(skillName(lesson.skill))}</span></div>
+      <div class="qread"><b class="readout">${lessonMinutes(lesson)}<small>min</small></b><span class="label">Read</span></div>
+    </header>
+    ${
+      stage === 'offer'
+        ? ''
+        : `<ol class="stepper" aria-label="Lesson steps">${steps
+            .map(
+              ([id, label, done], i) =>
+                `<li><button class="${id === stage ? 'on' : ''} ${done ? 'done' : ''}" data-action="lesson-go" data-stage="${id}" ${id === stage ? 'aria-current="step"' : ''}><span class="n">${done ? icon('check') : pad(i + 1)}</span><span>${label}</span></button></li>`,
+            )
+            .join('')}<li><span class="stepper-end ${lessonView.gate ? '' : 'dim'}"><span class="n">${pad(4)}</span><span>Practice</span></span></li></ol>`
+    }`;
+}
+
+function renderLessonView() {
+  const lv = lessonView;
+  const lesson = E.lessonFor(CONTENT, lv.skillId);
+  if (lv.stage === 'offer') return renderLessonOffer(lesson);
+  if (lv.stage === 'worked') return renderWorked(lesson);
+  if (lv.stage === 'faded') return renderFaded(lesson);
+  return renderLessonRead(lesson);
+}
+
+function renderLessonOffer(lesson) {
+  render(`
+    ${lessonHeader(lesson, 'offer')}
+    ${lessonView.note ? noteBanner(lessonView.note) : ''}
+    ${panel({
+      title: 'Building block',
+      icon: 'layers',
+      hud: true,
+      body: `<div class="rec-name">${esc(lesson.title)}</div>
+        <p class="muted">The tutor wants to check this building block, and you haven't studied it yet. A short lesson first usually makes the check more useful.</p>
+        <p class="small muted">Goal: ${esc(lesson.goal)}</p>
+        <button class="btn primary" data-action="lesson-accept">${icon('book')}Read the lesson first</button>
+        <button class="btn secondary" data-action="lesson-decline">${icon('next')}Skip to the check</button>`,
+    })}`);
+}
+
+function lessonFooter(lesson, stage) {
+  const lv = lessonView;
+  if (lv.snapshot) return `<button class="btn primary" data-action="lesson-exit">${icon('back')}Back to the question</button>`;
+  const practice = lv.gate
+    ? `<button class="btn primary" data-action="lesson-finish">${icon('play')}${lv.offer ? 'Continue to the check' : 'Start practice'}</button>`
+    : E.skillStatus(state, CONTENT, lesson.skill) === 'locked'
+      ? `<p class="small muted">This skill unlocks after its prerequisites: ${idx.skillById.get(lesson.skill).prereqs.map((p) => esc(skillName(p))).join(', ')}.</p><button class="btn secondary" data-action="home">${icon('back')}Back to dashboard</button>`
+      : `<button class="btn primary" data-action="skill" data-skill="${lesson.skill}">${icon('play')}Practice this skill</button>`;
+  if (stage === 'read') {
+    return `<button class="btn primary" data-action="lesson-go" data-stage="worked">Next: worked example${icon('next')}</button>
+      ${lv.gate ? `<button class="btn ghost" data-action="lesson-skip">Skip the lesson and go to questions</button>` : `<button class="btn secondary" data-action="home">${icon('back')}Back to dashboard</button>`}`;
+  }
+  if (stage === 'done') return `${practice}<button class="btn ghost" data-action="lesson-go" data-stage="read">Review the lesson</button>`;
+  return '';
+}
+
+function renderLessonRead(lesson) {
+  const lv = lessonView;
+  const readEvents = E.markLesson(state, CONTENT, lesson.skill, 'read', null, now());
+  if (readEvents.length) awardLearning(readEvents);
+  save();
+  const sections = lesson.sections
+    .map(
+      (sec, i) => `<section class="panel lesson-sec ${lv.section === sec.id ? 'target' : ''}" id="sec-${sec.id}">
+        <header class="panel-head"><span class="sec-n">${pad(i + 1)}</span><span class="ph-title">${esc(sec.heading)}</span></header>
+        <div class="panel-body">
+          ${sec.body.map((b) => `<p>${rich(b)}</p>`).join('')}
+          ${sec.points ? `<ul class="points">${sec.points.map((pt) => `<li>${rich(pt)}</li>`).join('')}</ul>` : ''}
+          ${sec.evidence ? snippetHtml(sec.evidence.text, sec.evidence.label) : ''}
+        </div>
+      </section>`,
+    )
+    .join('');
+  render(`
+    ${lessonHeader(lesson, 'read')}
+    ${lv.note && lv.gate ? noteBanner(lv.note) : ''}
+    ${panel({ title: esc(lesson.title), icon: 'book', hud: true, cls: 'lesson-goal', meta: `${lesson.sections.length} parts`, body: `<p class="lead-sm"><span class="label">Goal</span>${esc(lesson.goal)}</p>` })}
+    ${sections}
+    ${lessonFooter(lesson, 'read')}
+  `);
+  if (lv.section) {
+    const el = document.getElementById(`sec-${lv.section}`);
+    if (el) el.scrollIntoView({ block: 'start', behavior: 'auto' });
+    lv.section = null;
+  }
+}
+
+function renderWorked(lesson) {
+  const lv = lessonView;
+  const w = lesson.worked[lv.i];
+  const all = lv.step >= w.steps.length;
+  if (all) {
+    const evts = E.markLesson(state, CONTENT, lesson.skill, 'worked', w.id, now());
+    if (evts.length) awardLearning(evts);
+  }
+  const more = lv.i + 1 < lesson.worked.length;
+  render(`
+    ${lessonHeader(lesson, 'worked')}
+    <article class="panel hud worked">
+      <header class="panel-head">${icon('terminal')}<span class="ph-title">Worked example</span><span class="ph-meta">${esc(w.title)}</span></header>
+      <div class="panel-body">
+        ${snippetHtml(w.artifact, w.artifactLabel)}
+        <p class="prompt">${rich(w.question)}</p>
+        <div class="label">Analyst reasoning</div>
+        <ol class="steps">${w.steps
+          .slice(0, lv.step)
+          .map((st, i) => `<li class="step"><span class="step-n">Step ${pad(i + 1)}</span><span>${rich(st)}</span></li>`)
+          .join('')}</ol>
+        ${
+          all
+            ? `<div class="block ok-block"><div class="label">Verdict</div><div>${rich(w.conclusion)}</div></div>
+               ${more ? `<button class="btn primary" data-action="lesson-next-worked">Next worked example${icon('next')}</button>` : `<button class="btn primary" data-action="lesson-go" data-stage="faded">Your turn: finish an example${icon('next')}</button>`}`
+            : `<p class="small muted">Step ${lv.step} of ${w.steps.length}. Try to predict the next step before you reveal it.</p>
+               <button class="btn primary" data-action="lesson-step">Reveal next step${icon('next')}</button>
+               <button class="btn ghost" data-action="lesson-step-all">Show all steps</button>`
+        }
+      </div>
+    </article>
+    ${lv.snapshot ? lessonFooter(lesson, 'worked') : ''}
+  `);
+  if (lv.step > 1) document.querySelector('.steps li:last-child')?.scrollIntoView({ block: 'center' });
+}
+
+function renderFaded(lesson) {
+  const lv = lessonView;
+  const f = lesson.faded[lv.i];
+  lv.todo ??= 0;
+  lv.results ??= [];
+  const t = f.todo[lv.todo];
+  const done = lv.todo >= f.todo.length;
+  if (t && t.type === 'mc' && !lv.order) lv.order = shuffle(t.choices);
+
+  const given = f.given.map((g, i) => `<li class="step given"><span class="step-n">${icon('check')}Step ${pad(i + 1)}</span><span>${rich(g)}</span></li>`).join('');
+  const past = lv.results
+    .map(
+      (r, k) => `<li class="step ${r.correct ? 'you-ok' : 'you-bad'}"><span class="step-n">${icon(r.correct ? 'check' : 'x')}Step ${pad(f.given.length + k + 1)} · you</span>
+        <span>${rich(f.todo[k].prompt)}<br><b>${esc(r.answerText)}</b></span></li>`,
+    )
+    .join('');
+
+  let currentHtml = '';
+  if (!done) {
+    const n = f.given.length + lv.todo + 1;
+    let input;
+    if (t.type === 'text') {
+      input = `<input id="faded-text" class="text-answer" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="Type your answer" ${lv.answered ? 'disabled' : ''} value="${esc(lv.response || '')}" />
+        ${lv.answered ? '' : `<button class="btn primary" data-action="faded-check">${icon('check')}Check</button>`}`;
+    } else {
+      input = `<div class="choices" role="radiogroup">${lv.order
+        .map((c, i) => {
+          let cls = '';
+          if (lv.answered) {
+            if (c === t.answer) cls = 'correct';
+            else if (c === lv.response) cls = 'wrong';
+          }
+          return `<button class="choice ${cls}" data-action="faded-choose" data-index="${i}" role="radio" aria-checked="${lv.response === c}" ${lv.answered ? 'disabled' : ''}>
+            <span class="key">${lv.answered && c === t.answer ? icon('check') : lv.answered && c === lv.response ? icon('x') : String.fromCharCode(65 + i)}</span><span class="choice-text">${rich(c)}</span></button>`;
+        })
+        .join('')}</div>`;
+    }
+    currentHtml = `<div class="todo">
+        <div class="step-n now">Step ${pad(n)} · your turn</div>
+        <p class="prompt">${rich(t.prompt)}</p>
+        ${input}
+        ${
+          lv.answered
+            ? `<div class="block ${lv.correct ? 'ok-block' : 'bad-block'}"><div class="label">${lv.correct ? 'Correct' : `Not quite. Answer: ${esc(t.type === 'text' ? t.accept[0] : t.answer)}`}</div><div>${rich(t.explanation)}</div></div>
+               <button class="btn primary" data-action="faded-next">${lv.todo + 1 < f.todo.length ? 'Next step' : 'Finish the example'}${icon('next')}</button>`
+            : ''
+        }
+      </div>`;
+  }
+
+  render(`
+    ${lessonHeader(lesson, 'faded')}
+    <article class="panel hud faded">
+      <header class="panel-head">${icon('target')}<span class="ph-title">Your turn</span><span class="ph-meta">${esc(f.title)}</span></header>
+      <div class="panel-body">
+        ${snippetHtml(f.artifact, f.artifactLabel)}
+        <p class="prompt">${rich(f.question)}</p>
+        <div class="label">Analysis so far</div>
+        <ol class="steps">${given}${past}</ol>
+        ${done ? `<div class="block ok-block"><div class="label">Example complete</div><div>You finished the analysis. ${lv.results.every((r) => r.correct) ? 'Every step right.' : 'Check the explanation for any step you missed.'} Next up: independent practice.</div></div>` : currentHtml}
+      </div>
+    </article>
+    ${done ? lessonFooter(lesson, 'done') : lv.snapshot ? lessonFooter(lesson, 'faded') : ''}
+  `);
+  const input = document.getElementById('faded-text');
+  if (input && !lv.answered) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') fadedCheck();
+    });
+  }
+  if (lv.answered || lv.todo > 0) document.querySelector(done ? '.faded .ok-block' : '.todo')?.scrollIntoView({ block: 'start' });
+}
+
+function fadedCheck(choiceIndex = null) {
+  const lv = lessonView;
+  const lesson = E.lessonFor(CONTENT, lv.skillId);
+  const t = lesson.faded[lv.i].todo[lv.todo];
+  if (lv.answered) return;
+  let response;
+  let ok;
+  if (t.type === 'text') {
+    response = document.getElementById('faded-text').value;
+    if (!response.trim()) return;
+    ok = t.accept.some((a) => E.normalizeText(a) === E.normalizeText(response));
+  } else {
+    response = lv.order[choiceIndex];
+    ok = response === t.answer;
+  }
+  lv.answered = true;
+  lv.response = response;
+  lv.correct = ok;
+  renderFaded(lesson);
+}
+
+function fadedNext() {
+  const lv = lessonView;
+  const lesson = E.lessonFor(CONTENT, lv.skillId);
+  const f = lesson.faded[lv.i];
+  lv.results.push({ correct: lv.correct, answerText: lv.response });
+  lv.todo += 1;
+  lv.answered = false;
+  lv.response = null;
+  lv.order = null;
+  if (lv.todo >= f.todo.length) {
+    const evts = E.markLesson(state, CONTENT, lesson.skill, 'faded', f.id, now());
+    if (evts.length) awardLearning(evts);
+  }
+  renderFaded(lesson);
+}
+
+function lessonExit() {
+  const lv = lessonView;
+  lessonView = null;
+  if (lv?.snapshot) {
+    app.innerHTML = lv.snapshot.html;
+    refreshStatusXp();
+    const input = document.getElementById('answer-text');
+    if (input && lv.snapshot.value != null) input.value = lv.snapshot.value;
+    bindAnswerInput();
+    window.scrollTo(0, lv.snapshot.y);
+    return;
+  }
+  if (lv?.returnTo === 'report') return renderReport();
+  renderHome();
+}
+
+function snippetHtml(text, label = 'Evidence') {
   const lines = String(text).split('\n');
   return `<div class="evidence">
-      <div class="evidence-head"><span>${icon('terminal')}Evidence</span><span>${lines.length} line${lines.length === 1 ? '' : 's'}</span></div>
+      <div class="evidence-head"><span>${icon('terminal')}${esc(label)}</span><span>${lines.length} line${lines.length === 1 ? '' : 's'}</span></div>
       <pre class="snippet">${lines.map((l) => `<span class="ln">${esc(l) || ' '}</span>`).join('')}</pre>
     </div>`;
 }
@@ -554,13 +966,49 @@ function renderQuestion() {
   const isPlacement = mode === 'placement';
   const pl = state.placement;
   const [modeLabel, modeSev] = MODE[mode] || [mode, 'info'];
+  const hasLesson = !isPlacement && !!E.lessonFor(CONTENT, item.skill);
 
   const noteHtml = note ? noteBanner(note) : '';
+  const diff = `<span class="diff" aria-label="Difficulty ${item.difficulty} of 3">${'<i class="on"></i>'.repeat(item.difficulty)}${'<i></i>'.repeat(3 - item.difficulty)}</span>`;
+  const header = `${statusBar()}
+    <header class="qbar">
+      <button class="icon-btn" data-action="home" aria-label="Back to dashboard">${icon('x')}</button>
+      <div class="qbar-mid">
+        ${chip([modeLabel, modeSev], 'mode')}
+        <span class="skill-label">${current.recognized ? esc(skillName(item.skill)) : 'Area hidden'}</span>
+      </div>
+      ${hasLesson && current.recognized ? `<button class="icon-btn lesson-btn" data-action="open-lesson" data-skill="${item.skill}" data-from="question" aria-label="Review lesson" title="Review lesson">${icon('book')}</button>` : ''}
+      ${
+        isPlacement
+          ? `<div class="qread"><b class="readout">${pad(pl.index + 1)}<small>/${pad(pl.queue.length)}</small></b><span class="label">Placement</span></div>`
+          : `<div class="qread"><b class="readout" id="q-mastery">${current.recognized ? pct(ss.p) : '--'}<small>%</small></b><span class="label">Mastery</span></div>`
+      }
+    </header>`;
+
+  // Mixed practice step 1: recognise which knowledge area the evidence involves.
+  if (!current.recognized) {
+    render(`
+      ${header}
+      <article class="panel hud question recognize" data-item-id="${item.id}" data-mode="${mode}">
+        <header class="panel-head"><span class="ph-title">Triage · step 1 of 2</span><span class="ph-meta">Identify the area</span></header>
+        <div class="panel-body">
+          ${snippetHtml(item.snippet)}
+          <p class="prompt">Which area does this evidence involve?</p>
+          <p class="hint">Recognising the domain tells you which knowledge to reach for.</p>
+          <div class="choices">${current.areaChoices
+            .map(
+              (sid, i) => `<button class="choice" data-action="recognize" data-skill="${sid}"><span class="key">${String.fromCharCode(65 + i)}</span><span class="choice-text">${esc(skillName(sid))}<span class="choice-sub">${esc(idx.skillById.get(sid)?.track === 'host' ? 'Host' : 'Network')}</span></span></button>`,
+            )
+            .join('')}</div>
+        </div>
+      </article>`);
+    return;
+  }
 
   let answers = '';
   if (item.type === 'text') {
     answers = `<label class="field-label" for="answer-text">Your answer</label>
-      <input id="answer-text" class="text-answer" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="Type answer and press Enter" />`;
+      <input id="answer-text" class="text-answer" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" placeholder="Type your answer" />`;
   } else {
     answers = `${item.type === 'multi' ? '<p class="hint">Select every correct option, then submit.</p>' : ''}
       <div class="choices" role="${item.type === 'multi' ? 'group' : 'radiogroup'}">
@@ -574,22 +1022,24 @@ function renderQuestion() {
       </div>`;
   }
 
-  const diff = `<span class="diff" aria-label="Difficulty ${item.difficulty} of 3">${'<i class="on"></i>'.repeat(item.difficulty)}${'<i></i>'.repeat(3 - item.difficulty)}</span>`;
+  const submit = isPlacement
+    ? `<button id="submit-btn" class="btn primary" data-action="submit" disabled>${icon('check')}Submit answer</button>`
+    : `<div class="conf" id="submit-btn" role="group" aria-labelledby="conf-label">
+        <div class="label" id="conf-label">How sure are you? Tap to submit</div>
+        <div class="conf-row">${['guess', 'unsure', 'sure']
+          .map((c) => `<button class="conf-btn c-${c}" data-action="submit" data-conf="${c}" disabled><b>${CONF[c][0]}</b><span>${CONF[c][1]}</span></button>`)
+          .join('')}</div>
+      </div>`;
+
+  const rec = current.recogResult;
+  const recHtml = rec
+    ? `<div class="alert ${rec.ok ? 'ok' : 'warn'}" role="status"><div class="alert-tag">${icon(rec.ok ? 'check' : 'alert')}<span>Triage // ${rec.ok ? 'Area identified' : 'Area missed'}</span></div>
+        <div class="alert-msg">${rec.ok ? `Right: this is ${esc(skillName(item.skill))}.` : `You picked ${esc(skillName(rec.picked))}. This evidence is about ${esc(skillName(item.skill))}.`}</div></div>`
+    : '';
 
   render(`
-    ${statusBar()}
-    <header class="qbar">
-      <button class="icon-btn" data-action="home" aria-label="Back to dashboard">${icon('x')}</button>
-      <div class="qbar-mid">
-        ${chip([modeLabel, modeSev], 'mode')}
-        <span class="skill-label">${esc(skillName(item.skill))}</span>
-      </div>
-      ${
-        isPlacement
-          ? `<div class="qread"><b class="readout">${pad(pl.index + 1)}<small>/${pad(pl.queue.length)}</small></b><span class="label">Placement</span></div>`
-          : `<div class="qread"><b class="readout" id="q-mastery">${pct(ss.p)}<small>%</small></b><span class="label">Mastery</span></div>`
-      }
-    </header>
+    ${header}
+    ${recHtml}
     ${noteHtml}
     <article class="panel hud question" data-item-id="${item.id}" data-skill="${item.skill}" data-mode="${mode}">
       <header class="panel-head"><span class="ph-title">Item ${esc(item.id.toUpperCase())}</span><span class="ph-meta">${TYPE_LABEL[item.type]} ${diff}</span></header>
@@ -597,19 +1047,42 @@ function renderQuestion() {
         <p class="prompt">${rich(item.prompt)}</p>
         ${item.snippet ? snippetHtml(item.snippet) : ''}
         ${answers}
-        <button id="submit-btn" class="btn primary" data-action="submit" ${item.type === 'text' ? '' : 'disabled'}>${icon('check')}Submit answer</button>
+        ${submit}
         ${isPlacement ? `<button class="btn ghost" data-action="end-placement">Skip the rest of placement</button>` : ''}
       </div>
     </article>
     <div id="feedback"></div>
   `);
+  bindAnswerInput();
+}
 
+function setSubmitEnabled(on) {
+  app.querySelectorAll('[data-action="submit"]').forEach((b) => {
+    b.disabled = !on;
+  });
+}
+
+function bindAnswerInput() {
   const input = document.getElementById('answer-text');
-  if (input) {
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submitAnswer();
-    });
-  }
+  if (!input || input.disabled) return;
+  input.addEventListener('input', () => setSubmitEnabled(input.value.trim().length > 0));
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !input.value.trim()) return;
+    e.preventDefault();
+    if (current?.mode === 'placement') submitAnswer(null);
+    else app.querySelector('.conf-btn')?.focus();
+  });
+}
+
+function recognize(skillId) {
+  if (!current || current.recognized) return;
+  const ok = skillId === current.item.skill;
+  E.recordRecognition(state, ok);
+  save();
+  current.recognized = true;
+  current.recogResult = { ok, picked: skillId };
+  renderQuestion();
+  window.scrollTo(0, 0);
 }
 
 function noteBanner(note) {
@@ -631,12 +1104,14 @@ function choose(i) {
     el.classList.toggle('selected', on);
     el.setAttribute('aria-checked', on ? 'true' : 'false');
   });
-  document.getElementById('submit-btn').disabled = current.selected.size === 0;
+  setSubmitEnabled(current.selected.size > 0);
 }
 
-function submitAnswer() {
+function submitAnswer(confidence) {
   if (!current || current.answered) return;
   const { item } = current;
+  const isPlacement = current.mode === 'placement';
+  if (!isPlacement && !CONF[confidence]) return; // confidence is required outside placement
   let response;
   if (item.type === 'text') {
     const input = document.getElementById('answer-text');
@@ -646,40 +1121,64 @@ function submitAnswer() {
       return;
     }
   } else if (item.type === 'mc') {
+    if (!current.selected.size) return;
     response = current.order[[...current.selected][0]];
   } else {
+    if (!current.selected.size) return;
     response = [...current.selected].map((i) => current.order[i]);
   }
+  const t = now();
+  const conf = isPlacement ? undefined : confidence;
   const correct = E.checkAnswer(item, response);
+  const misconceptions = correct ? [] : E.misconceptionsForResponse(item, response);
   const wasMastered = E.isMastered(state, CONTENT, item.skill);
-  const result = E.recordAnswer(state, CONTENT, item.id, correct, { mode: current.mode, session: session.type });
+  const result = E.recordAnswer(state, CONTENT, item.id, correct, {
+    mode: current.mode,
+    session: session.type,
+    confidence: conf,
+    misconceptions,
+    now: t,
+  });
   const gain = G.onAnswer(state.game, state, CONTENT, {
     item,
     correct,
-    mode: current.mode,
+    mode: current.mode === 'placement' ? 'placement' : session.type === 'daily' ? 'daily' : current.mode,
     events: result.events,
     wasMastered,
-    dueAfter: G.dueCount(state),
-    now: Date.now(),
+    dueAfter: session.type === 'daily' ? E.dailyDue(state, CONTENT, t).length : G.dueCount(state),
+    confidence: conf,
+    now: t,
   });
   current.answered = true;
+  current.confidence = conf;
+  current.response = response;
   current.result = result;
   current.gain = gain;
   save();
-  renderFeedback(response);
+  renderFeedback();
   refreshStatusXp();
   xpToast(gain.xp);
   queueAchievements(gain);
 }
 
+function lessonLink(ref, label) {
+  if (!ref) return '';
+  const [skillId, section] = ref.split('#');
+  const lesson = E.lessonFor(CONTENT, skillId);
+  if (!lesson) return '';
+  const sec = lesson.sections.find((s) => s.id === section);
+  return `<button class="link-btn" data-action="open-lesson" data-skill="${skillId}" data-section="${section || ''}" data-from="question">${icon('book')}${esc(label || `Review lesson: ${sec ? sec.heading : lesson.title}`)}</button>`;
+}
+
 function renderFeedback() {
-  const { item, result, mode } = current;
+  const { item, result, mode, confidence } = current;
   const correct = result.correct;
 
   // Mark the answer area.
   if (item.type === 'text') {
     const input = document.getElementById('answer-text');
     input.disabled = true;
+    input.setAttribute('value', current.response);
     input.classList.add(correct ? 'correct' : 'wrong');
   } else {
     const right = new Set(item.type === 'mc' ? [item.answer] : item.answer);
@@ -717,6 +1216,38 @@ function renderFeedback() {
     answerHtml = `<div class="block ok-block"><div class="label">${item.type === 'multi' ? 'Correct answers' : item.type === 'text' ? 'Accepted answer' : 'Correct answer'}</div><div>${body}</div></div>`;
   }
 
+  // Targeted misconception fixes.
+  const followUpSoon = mode !== 'placement';
+  const fixes = (result.misconceptions || [])
+    .map((id) => idx.misById.get(id))
+    .filter(Boolean)
+    .map(
+      (m) => `<div class="block fix-block">
+        <div class="label">${icon('target')}Common mix-up: ${esc(m.name)}</div>
+        <p class="small">${rich(m.description)}</p>
+        <p><b>Fix:</b> ${rich(m.fix)}</p>
+        ${lessonLink(m.lesson)}
+        ${followUpSoon ? '<p class="small muted fix-next">A follow-up question on this idea is coming up in the next few items.</p>' : ''}
+      </div>`,
+    )
+    .join('');
+
+  // Confidence and calibration.
+  let confHtml = '';
+  if (confidence) {
+    const [label] = CONF[confidence];
+    let msg;
+    if (correct && confidence === 'guess') msg = 'Right, but a guess earns only partial mastery credit. It will come back soon to check it sticks.';
+    else if (correct && confidence === 'unsure') msg = 'Right. Unsure answers earn most of the credit; being sure next time earns it all.';
+    else if (correct) msg = 'Right and sure: full mastery credit.';
+    else if (confidence === 'sure') msg = 'Wrong while sure usually means a misconception rather than a slip. It is flagged and scheduled again soon.';
+    else if (confidence === 'guess') msg = 'An honest guess. Knowing what you don\'t know is a real analyst skill.';
+    else msg = 'Wrong while unsure. Review the analysis below.';
+    const c = state.calibration?.sure || { n: 0, correct: 0 };
+    const calib = c.n ? `<span class="mono">Sure accuracy ${Math.round((c.correct / c.n) * 100)}% (${c.n})</span>` : '';
+    confHtml = `<div class="conf-note c-${confidence} ${!correct && confidence === 'sure' ? 'flag' : ''}"><div class="label row"><span>You said: ${label}</span>${calib}</div><p class="small">${msg}</p></div>`;
+  }
+
   const isPlacement = mode === 'placement';
   const up = result.after >= result.before;
   const diffPts = Math.abs(pct(result.after) - pct(result.before));
@@ -726,11 +1257,16 @@ function renderFeedback() {
         <div class="label row"><span>Skill mastery</span>${diffPts === 0 ? '<span class="nowrap muted">No change</span>' : `<span class="nowrap ${up ? 'ok-text' : 'crit-text'}">${up ? '▲' : '▼'} ${diffPts} pts</span>`}</div>
         <div class="delta-row">${bar(result.after, result.after >= E.PARAMS.masteryThreshold ? 'ok' : up ? '' : 'crit')}<span class="mono"><span class="muted">${pct(result.before)}%</span> → <b>${pct(result.after)}%</b></span></div>
       </div>`;
+  const lessonEvt = (e) => {
+    if (!['gap-found', 'probe-start'].includes(e.type) || !e.skillId) return '';
+    const l = E.lessonFor(CONTENT, e.skillId);
+    return l ? `<br>${lessonLink(`${e.skillId}#${l.sections[0].id}`, `Open lesson: ${skillName(e.skillId)}`)}` : '';
+  };
   const events = result.events.length
     ? `<div class="label">Event log</div><ul class="evlog">${result.events
         .map((e) => {
           const [tag, sev] = EVENT[e.type] || ['Info', 'info'];
-          return `<li class="${e.type}"><span class="tag ${sev}">${tag}</span><span>${esc(plainText(e.text))}</span></li>`;
+          return `<li class="${e.type}"><span class="tag ${sev}">${tag}</span><span>${esc(plainText(e.text))}${lessonEvt(e)}</span></li>`;
         })
         .join('')}</ul>`
     : '';
@@ -754,13 +1290,17 @@ function renderFeedback() {
   if (qm) qm.innerHTML = `${pct(result.after)}<small>%</small>`;
 
   const lastPlacement = isPlacement && state.placement.index >= state.placement.queue.length;
+  const sectionRef = !correct && !fixes && E.lessonFor(CONTENT, item.skill) ? lessonLink(`${item.skill}#${E.lessonFor(CONTENT, item.skill).sections[0].id}`, 'Review the lesson for this skill') : '';
   document.getElementById('feedback').innerHTML = `
     <section class="panel feedback ${correct ? 'fb-ok' : 'fb-bad'}" id="feedback-card">
       <header class="panel-head">${icon(correct ? 'check' : 'x')}<span class="ph-title">${correct ? 'Correct' : 'Incorrect'}</span><span class="ph-meta">Result</span></header>
       <div class="panel-body">
+        ${confHtml}
+        ${fixes}
         ${answerHtml}
         <div class="label">Analysis</div>
         <p class="explanation">${rich(item.explanation)}</p>
+        ${isPlacement ? '' : sectionRef}
         ${delta}
         ${xpHtml}
         ${events}
@@ -769,7 +1309,7 @@ function renderFeedback() {
         <button class="btn ghost" data-action="home">Back to dashboard</button>
       </div>
     </section>`;
-  document.getElementById('feedback-card').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  document.getElementById('feedback-card').scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
 }
 
 // ------------------------------------------------------------------ placement
@@ -839,6 +1379,60 @@ function renderReport() {
       <div class="row sub"><span>Needed for: ${g.neededFor.map(esc).join(', ')}</span><span class="mono">${pct(g.p)}%</span></div>
     </li>`;
 
+  const cal = r.calibration;
+  const calRow = (c) => {
+    const k = cal[c];
+    return `<li class="cal-row c-${c}"><span class="cal-label">${CONF[c][0]}</span>
+      <div class="bar cal-bar"><span style="width:${k.n ? Math.round(k.accuracy * 100) : 0}%"></span></div>
+      <span class="mono">${k.n ? `${Math.round(k.accuracy * 100)}%` : '--'}</span><span class="mono muted cal-n">n=${k.n}</span></li>`;
+  };
+  const sure = cal.sure;
+  let calVerdict;
+  if (sure.n < 5) calVerdict = `Rate your confidence on every answer. After ${5 - sure.n} more "Sure" answer${5 - sure.n === 1 ? '' : 's'} the tutor can judge your calibration.`;
+  else if (sure.accuracy >= 0.9) calVerdict = 'Well calibrated: when you say Sure, you are almost always right. Trust that instinct on shift.';
+  else if (sure.accuracy >= 0.8) calVerdict = 'Mostly calibrated. A few Sure answers were wrong; those are listed below as confident errors.';
+  else calVerdict = 'Overconfident: too many Sure answers were wrong. Slow down and check the evidence before committing, the way you would before escalating.';
+  const calibrationPanel = panel({
+    title: 'Confidence calibration',
+    icon: 'gauge',
+    meta: `${cal.guess.n + cal.unsure.n + cal.sure.n} rated`,
+    cls: 'calibration',
+    body: `<p class="muted small">How often your answers were right at each confidence level. Good calibration: Sure answers are right 80%+ of the time.</p>
+      <ul class="cal-list">${['sure', 'unsure', 'guess'].map(calRow).join('')}</ul>
+      <p class="small cal-verdict ${sure.n >= 5 && sure.accuracy < 0.8 ? 'warn-text' : ''}">${esc(calVerdict)}</p>
+      ${
+        r.confidentErrors.length
+          ? `<div class="label spaced">Confident errors (answered Sure, was wrong)</div>${list(
+              r.confidentErrors,
+              (m) => `<li><div class="row sub"><span class="mono">${esc(m.id.toUpperCase())} · ${esc(m.skillName)}</span><span class="mono crit-text">${m.count}×</span></div>
+                <div class="q-excerpt">${rich(m.prompt)}</div>${m.inReview ? '<div class="row sub"><span class="warn-text">Scheduled for review</span></div>' : ''}</li>`,
+              '',
+            )}`
+          : ''
+      }
+      ${r.recognition.asked ? `<div class="label spaced">Mixed practice triage</div><p class="small">You identified the right area for <b class="mono">${r.recognition.recognized}/${r.recognition.asked}</b> evidence snippets.</p>` : ''}`,
+  });
+
+  const mis = r.misconceptions;
+  const misPanel = panel({
+    title: 'Misconceptions',
+    icon: 'target',
+    meta: mis.active.length ? `${mis.active.length} active` : mis.resolved.length ? `${mis.resolved.length} busted` : 'None',
+    cls: mis.active.length ? 'crit-panel' : '',
+    body: `<p class="muted small">Specific wrong ideas your answers revealed. Each one is re-tested with a different question until you get it right.</p>
+      ${list(
+        mis.active,
+        (m) => `<li class="mis-row">
+          <div class="row"><span class="name">${esc(m.name)}</span>${chip([m.sure ? 'Confident' : 'Active', m.sure ? 'crit' : 'warn'])}</div>
+          <div class="row sub"><span>${esc(skillName(m.skillId))}</span><span class="mono">seen ${m.hits}×${m.relapses ? ` · relapsed ${m.relapses}×` : ''}</span></div>
+          <p class="small mis-fix">${rich(m.fix)}</p>
+          ${m.lesson ? lessonLink(m.lesson).replace('data-from="question"', 'data-from="report"') : ''}
+        </li>`,
+        'No active misconceptions. When a wrong answer matches a common mix-up, it shows up here with a targeted fix.',
+      )}
+      ${mis.resolved.length ? `<div class="label spaced">Busted</div><div class="pill-list">${mis.resolved.map((m) => chip([m.name, 'ok'], 'pill')).join('')}</div>` : ''}`,
+  });
+
   render(`
     ${statusBar()}
     <header class="qbar">
@@ -852,11 +1446,13 @@ function renderReport() {
       body: `<div class="stats four">
           <div class="stat"><b class="mono">${pad(r.answered, 3)}</b><span>Answered</span></div>
           <div class="stat"><b class="mono">${r.answered ? pct(r.accuracy) + '%' : '--'}</b><span>Accuracy</span></div>
-          <div class="stat ${r.reviewCount ? 'warn' : ''}"><b class="mono">${pad(r.reviewCount)}</b><span>To review</span></div>
+          <div class="stat ${sure.n ? '' : ''}"><b class="mono">${sure.n ? `${Math.round(sure.accuracy * 100)}%` : '--'}</b><span>Sure right</span></div>
           <div class="stat ${r.rootGaps.length ? 'crit' : ''}"><b class="mono">${pad(r.rootGaps.length)}</b><span>Root gaps</span></div>
         </div>`,
     })}
     ${rec}
+    ${misPanel}
+    ${calibrationPanel}
     ${panel({
       title: 'Root gaps identified',
       icon: 'alert',
@@ -917,6 +1513,60 @@ app.addEventListener('click', (e) => {
       return startSession({ type: 'auto' });
     case 'review':
       return startSession({ type: 'review' });
+    case 'daily':
+      return startSession({ type: 'daily' });
+    case 'mixed':
+      return startSession({ type: 'mixed' });
+    case 'open-lesson': {
+      const from = el.dataset.from;
+      const fromQuestion = from === 'question' && !!current && !!document.querySelector('.question');
+      return openLesson(el.dataset.skill, { section: el.dataset.section || null, fromQuestion, returnTo: from === 'report' ? 'report' : null });
+    }
+    case 'lesson-go':
+      if (!lessonView) return undefined;
+      Object.assign(lessonView, { stage: el.dataset.stage, i: 0, step: 1, todo: 0, results: [], answered: false, response: null, order: null });
+      renderLessonView();
+      return window.scrollTo(0, 0);
+    case 'lesson-step':
+      lessonView.step += 1;
+      return renderLessonView();
+    case 'lesson-step-all':
+      lessonView.step = 99;
+      return renderLessonView();
+    case 'lesson-next-worked':
+      Object.assign(lessonView, { i: lessonView.i + 1, step: 1 });
+      renderLessonView();
+      return window.scrollTo(0, 0);
+    case 'faded-choose':
+      return fadedCheck(Number(el.dataset.index));
+    case 'faded-check':
+      return fadedCheck();
+    case 'faded-next':
+      return fadedNext();
+    case 'lesson-exit':
+      return lessonExit();
+    case 'lesson-accept': {
+      E.markLesson(state, CONTENT, lessonView.skillId, 'offered', null, now());
+      save();
+      lessonView.stage = 'read';
+      renderLessonView();
+      return window.scrollTo(0, 0);
+    }
+    case 'lesson-decline':
+      E.markLesson(state, CONTENT, lessonView.skillId, 'offered', null, now());
+      save();
+      lessonView = null;
+      return showNext();
+    case 'lesson-skip':
+      awardLearning(E.markLesson(state, CONTENT, lessonView.skillId, 'skip', null, now()));
+      lessonView = null;
+      return session ? showNext() : renderHome();
+    case 'lesson-finish':
+      lessonView = null;
+      if (!session) session = { type: 'auto' };
+      return showNext();
+    case 'recognize':
+      return recognize(el.dataset.skill);
     case 'skill':
       return startSession({ type: 'skill', skillId: el.dataset.skill });
     case 'report':
@@ -949,7 +1599,7 @@ app.addEventListener('click', (e) => {
     case 'choose':
       return choose(Number(el.dataset.index));
     case 'submit':
-      return submitAnswer();
+      return submitAnswer(el.dataset.conf);
     case 'next':
       return showNext();
     case 'reset':
