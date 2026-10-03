@@ -7,7 +7,7 @@
 export const L2_TRACK = {
   id: 'soc',
   name: 'SOC operations (Level 2)',
-  description: 'Real analyst workflows built on the basics: triage, SIEM, phishing, malware, ATT&CK, incident response, hunting, vulnerability management, web attacks, network security monitoring and threat intelligence.',
+  description: 'Real analyst workflows built on the basics: triage, SIEM, phishing, malware, ATT&CK, incident response, hunting, vulnerability management, web attacks, network security monitoring, threat intelligence and scripting.',
   comingSoon: false,
 };
 
@@ -110,5 +110,14 @@ export const L2_SKILLS = [
     order: 30,
     prereqs: ['l2-malware', 'l2-attack'],
     summary: 'Intel levels, TLP 2.0, Pyramid of Pain, Diamond Model, IOC/IOA/TTP, STIX/TAXII, MISP, Admiralty grades, IOC aging and enrichment.',
+  },
+  {
+    id: 'l2-scripting',
+    name: 'Scripting, regex & playbooks',
+    track: 'soc',
+    level: 2,
+    order: 31,
+    prereqs: ['l2-siem', 'host-processes'],
+    summary: 'Read short PowerShell, Python and Bash safely, spot malicious PowerShell in text, regex for logs, JSON vs CSV, and playbook step order.',
   },
 ];

@@ -8,7 +8,7 @@ import * as E from '../js/engine.js';
 import { CONTENT } from '../content/index.js';
 
 const idx = E.indexContent(CONTENT);
-const SPECIALIST = ['l2-vuln', 'l2-web', 'l2-ids', 'l2-intel'];
+const SPECIALIST = ['l2-vuln', 'l2-web', 'l2-ids', 'l2-intel', 'l2-scripting'];
 const HIGHER = new Set(['apply', 'analyze', 'evaluate', 'create']);
 const BLOOM = new Set(['remember', 'understand', ...HIGHER]);
 const itemsOf = (id) => CONTENT.items.filter((i) => i.skill === id);
@@ -96,4 +96,10 @@ test('threat intel anchors: TLP 2.0, Pyramid, Diamond, STIX/TAXII, MISP, Admiral
     assert.ok(t.includes(k), `intel: ${k}`);
   assert.equal(CONTENT.items.find((i) => i.id === 'ti-02').accept[0], 'tlp:clear');
   assert.equal(CONTENT.items.find((i) => i.id === 'ti-13').answer, 'Usually reliable source, probably true');
+});
+
+test('scripting anchors: encoded PowerShell, 4104, regex, JSON, playbook order', () => {
+  const s = text('l2-scripting');
+  for (const k of ['-enc', '4104', 'utf-16', 'downloadstring', 'iex', '\\d', 'trailing comma', 'revoke', 'break-glass', 't1059.001'])
+    assert.ok(s.includes(k), `scripting: ${k}`);
 });

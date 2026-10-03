@@ -218,6 +218,7 @@ Level 2 is built to the same standard as Level 1. Each skill has a lesson (4–5
 | Web application attacks (`l2-web`) | HTTP, Alert triage | SQLi, XSS, LFI/RFI and path traversal, command injection, SSRF, web shells, credential stuffing vs spraying and directory brute force in access and WAF logs; URL decoding; status codes; WAF limits; OWASP Top 10 2021 and 2025 (30+ questions) |
 | IDS/IPS & network monitoring (`l2-ids`) | Firewall logs, Alert triage | Snort/Suricata rule anatomy (header, flow, content, sticky buffers, pcre, sid/rev, thresholds), eve.json alerts and verdicts, Zeek conn/dns/http/ssl/notice logs, tuning noisy signatures, IDS vs IPS placement and fail-open trade-offs (30+ questions) |
 | Threat intelligence (`l2-intel`) | Malware basics, ATT&CK | Intel levels, TLP 2.0 (CLEAR, AMBER+STRICT), Pyramid of Pain, Diamond Model, IOC vs IOA vs TTP, STIX/TAXII, MISP, Admiralty code, IOC aging and enrichment. Case logs can look up a fictional WHOIS, reputation, passive DNS and sandbox record (30+ questions) |
+| Scripting, regex & playbooks (`l2-scripting`) | SIEM queries, Processes | Read and debug short PowerShell, Python and Bash; recognise malicious PowerShell shown as text; regex for logs; JSON vs CSV; playbook step order (30+ questions) |
 
 **Level 2 SIEM cases** (`content/l2/siem-cases.js`) open once you have learned the Level 2 skills they rely on. They add two new log sources, *Mail gateway* and *Malware sandbox*:
 
