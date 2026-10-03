@@ -17,13 +17,14 @@ import { NIGHT_SHIFT } from './l2/night-shift.js';
 import { L3, withL3Skills, withL3Track } from './l3/index.js';
 import { L3_SIEM_CASES } from './l3/siem-cases.js';
 import { MAJOR_INCIDENT } from './l3/major-incident.js';
+import { MORE } from './more/index.js';
 
 export const CONTENT = {
   tracks: withL3Track(withL2Track(TRACKS)),
   skills: withL3Skills(withL2Skills(SKILLS)),
-  items: [...HOST_ITEMS, ...NETWORK_ITEMS, ...L2.items, ...L3.items],
+  items: [...HOST_ITEMS, ...NETWORK_ITEMS, ...L2.items, ...L3.items, ...MORE.items],
   lessons: [...HOST_LESSONS, ...NETWORK_LESSONS, ...L2.lessons, ...L3.lessons],
-  misconceptions: [...MISCONCEPTIONS, ...L2.misconceptions, ...L3.misconceptions],
+  misconceptions: [...MISCONCEPTIONS, ...L2.misconceptions, ...L3.misconceptions, ...MORE.misconceptions],
   scenarios: [...SCENARIOS, NIGHT_SHIFT, MAJOR_INCIDENT],
   siemCases: [...SIEM_CASES, ...AMBIGUOUS_CASES, ...L2_SIEM_CASES, ...L3_SIEM_CASES],
   tiers: TIERS,

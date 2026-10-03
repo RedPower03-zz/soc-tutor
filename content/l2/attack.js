@@ -344,6 +344,14 @@ const misconceptions = [
     fix: 'Techniques have many procedures. A rule matching `powershell.exe -enc` or the word "mimikatz" catches one of them. Real coverage means detecting the underlying behaviour (encoded or obfuscated script execution, any process reading LSASS memory) and testing it, for example with red-team or atomic tests.',
     lesson: 'l2-attack#using',
   },
+  {
+    id: 'attack-v19-tactics',
+    skill: 'l2-attack',
+    name: 'Still using "Defense Evasion" after v19',
+    description: 'Treats Defense Evasion as a current ATT&CK Enterprise tactic, or confuses Stealth with Defense Impairment.',
+    fix: 'ATT&CK Enterprise v19 (April 2026) retired Defense Evasion and split it into Stealth (TA0005: hide and blend in — masquerading, proxy execution, timestomping) and Defense Impairment (TA0112: break or disable defenses — clearing logs, killing EDR, disabling firewalls). When a question asks for a v19 tactic, "Defense Evasion" is the old name and is wrong.',
+    lesson: 'l2-attack#framework',
+  },
 ];
 
 export const ATTACK = { items, lesson, misconceptions };

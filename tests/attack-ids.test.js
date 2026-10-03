@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { CONTENT } from '../content/index.js';
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/attack-enterprise-v19.json', import.meta.url)));
-const VALID = new Set(fixture.valid);
+const VALID = new Set(Object.keys(fixture.techniques));
 const PLACEHOLDERS = new Set(['T1234', 'T1234.001']);
 const HISTORY = /(formerly|was|previously|revoked|renumbered|old)\b[^.]{0,40}$/i;
 
