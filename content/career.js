@@ -75,14 +75,14 @@ export const RANKS = [
   // Stream A Oct 2026 pool expansion: L1+L2 + 1 month of reviews stays below
   // Senior Analyst II; all content alone lands around Threat Hunter (rank ~12);
   // SOC Manager needs ~3 months of daily reviews on top of finishing everything.
-  // l2-saas added ~975 XP. L1+L2 + 1 month (~29885, and room for the
-  // new L2 cases) stays under Senior Analyst II. All content lands on
-  // Incident Responder, below Detection Engineer. SOC Manager stays
-  // above two months of reviews and within three.
-  { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 32000, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
+  // After l2-saas, the eight L2 cases and the hands-on labs, L1+L2 + 1 month
+  // is about 32075 and must stay under Senior Analyst II. All content (~36565)
+  // lands on Threat Hunter, below Detection Engineer. SOC Manager stays above
+  // two months of reviews and within three.
+  { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 33000, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
   { id: 'responder', title: 'Incident Responder', band: 'l3', xp: 33500, gates: [{ type: 'skills', skills: ['l2-ir', 'l3-forensics'] }] },
   { id: 'hunter', title: 'Threat Hunter', band: 'l3', xp: 35000, gates: [{ type: 'skills', skills: ['l2-hunting', 'l3-identity'] }] },
   { id: 'detection', title: 'Detection Engineer', band: 'l3', xp: 38500, gates: [{ type: 'skills', skills: ['l2-siem', 'l3-detection'] }] },
   { id: 'lead', title: 'SOC Lead', band: 'l3', xp: 40500, gates: [{ type: 'tier', tier: 'l3' }] },
-  { id: 'manager', title: 'SOC Manager', band: 'l3', xp: 42500, gates: [{ type: 'all-tiers' }, { type: 'scenario', id: 'major-incident', title: 'Major incident capstone' }] },
+  { id: 'manager', title: 'SOC Manager', band: 'l3', xp: 44000, gates: [{ type: 'all-tiers' }, { type: 'scenario', id: 'major-incident', title: 'Major incident capstone' }] },
 ];
