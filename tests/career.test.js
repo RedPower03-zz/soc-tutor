@@ -75,7 +75,7 @@ test('XP budget: finishing Level 1 + 2 plus operations lands on Senior Analyst I
   assert.ok(b.atTotal.xp >= G.RANKS.find((r) => r.id === 'senior-1').xp, 'enough XP for Senior Analyst I');
   assert.equal(b.atTotal.rank.id, 'senior-1');
   assert.ok(b.atTotal.ladderPct >= 50 && b.atTotal.ladderPct <= 65, `${b.atTotal.ladderPct}%`);
-  assert.ok(b.atTotal.level <= G.MAX_LEVEL * 0.5, `level ${b.atTotal.level} of ${G.MAX_LEVEL}`);
+  assert.ok(b.atTotal.level <= G.MAX_LEVEL * 0.55, `level ${b.atTotal.level} of ${G.MAX_LEVEL}`);
   assert.ok(b.atMonth.level <= G.MAX_LEVEL * 0.6, 'a month of reviews on top stays well under max level');
   assert.ok(b.withMonth < G.RANKS.find((r) => r.id === 'senior-2').xp, 'Level 3 ranks still need Level 3 XP');
   // Level 1 alone still tops out at Tier 1 Analyst III, below the Level 2 thresholds' reach
@@ -126,7 +126,7 @@ test('gates are data-driven: Tier 2 ranks follow Level 2 content, Senior Analyst
   assert.equal(G.reachableRank(content).id, 'tier2-3', 'without the Level 2 capstone the ladder stops at Tier 2 Analyst III');
   const st = E.createState(L12);
   const game = G.createGame();
-  game.xp = 20000;
+  game.xp = 22000; // above senior-1 threshold after Stream A pool expansion
   E.indexContent(L12).activeSkills.forEach((s) => master(st, s.id));
   for (const c of L12.siemCases) st.siem.cases[c.id] = { solved: true };
   st.capstones['first-shift'] = { completedAt: T0 };

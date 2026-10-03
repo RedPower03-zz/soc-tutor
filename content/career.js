@@ -65,15 +65,20 @@ export const RANKS = [
     gates: [{ type: 'tier', tier: 'l1' }, { type: 'cases', count: 3 }, { type: 'scenario', id: 'first-shift' }],
   },
   // ---- SOC Operations (Level 2)
-  { id: 'tier2-1', title: 'Tier 2 Analyst I', band: 'l2', xp: 7000, gates: [{ type: 'mastered', tier: 'l2', count: 2 }] },
-  { id: 'tier2-2', title: 'Tier 2 Analyst II', band: 'l2', xp: 8500, gates: [{ type: 'mastered', tier: 'l2', count: 4 }] },
-  { id: 'tier2-3', title: 'Tier 2 Analyst III', band: 'l2', xp: 10000, gates: [{ type: 'tier', tier: 'l2' }] },
-  { id: 'senior-1', title: 'Senior Analyst I', band: 'l2', xp: 11500, gates: [{ type: 'tier', tier: 'l2' }, { type: 'scenario', id: 'night-shift-lead', title: 'Night-shift lead capstone' }] },
+  // L2 XP floors raised above the expanded Level 1 pool (~14.3k XP) so foundations
+  // XP alone cannot numerically fill the Level 2 band (gates already block it).
+  { id: 'tier2-1', title: 'Tier 2 Analyst I', band: 'l2', xp: 15000, gates: [{ type: 'mastered', tier: 'l2', count: 2 }] },
+  { id: 'tier2-2', title: 'Tier 2 Analyst II', band: 'l2', xp: 17000, gates: [{ type: 'mastered', tier: 'l2', count: 4 }] },
+  { id: 'tier2-3', title: 'Tier 2 Analyst III', band: 'l2', xp: 19000, gates: [{ type: 'tier', tier: 'l2' }] },
+  { id: 'senior-1', title: 'Senior Analyst I', band: 'l2', xp: 21000, gates: [{ type: 'tier', tier: 'l2' }, { type: 'scenario', id: 'night-shift-lead', title: 'Night-shift lead capstone' }] },
   // ---- Advanced (Level 3)
-  { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 19000, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
-  { id: 'responder', title: 'Incident Responder', band: 'l3', xp: 20000, gates: [{ type: 'skills', skills: ['l2-ir', 'l3-forensics'] }] },
-  { id: 'hunter', title: 'Threat Hunter', band: 'l3', xp: 21500, gates: [{ type: 'skills', skills: ['l2-hunting', 'l3-identity'] }] },
-  { id: 'detection', title: 'Detection Engineer', band: 'l3', xp: 23000, gates: [{ type: 'skills', skills: ['l2-siem', 'l3-detection'] }] },
-  { id: 'lead', title: 'SOC Lead', band: 'l3', xp: 25500, gates: [{ type: 'tier', tier: 'l3' }] },
-  { id: 'manager', title: 'SOC Manager', band: 'l3', xp: 28000, gates: [{ type: 'all-tiers' }, { type: 'scenario', id: 'major-incident', title: 'Major incident capstone' }] },
+  // Stream A Oct 2026 pool expansion: L1+L2 + 1 month of reviews stays below
+  // Senior Analyst II; all content alone lands around Threat Hunter (rank ~12);
+  // SOC Manager needs ~3 months of daily reviews on top of finishing everything.
+  { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 27500, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
+  { id: 'responder', title: 'Incident Responder', band: 'l3', xp: 29000, gates: [{ type: 'skills', skills: ['l2-ir', 'l3-forensics'] }] },
+  { id: 'hunter', title: 'Threat Hunter', band: 'l3', xp: 30500, gates: [{ type: 'skills', skills: ['l2-hunting', 'l3-identity'] }] },
+  { id: 'detection', title: 'Detection Engineer', band: 'l3', xp: 33500, gates: [{ type: 'skills', skills: ['l2-siem', 'l3-detection'] }] },
+  { id: 'lead', title: 'SOC Lead', band: 'l3', xp: 36000, gates: [{ type: 'tier', tier: 'l3' }] },
+  { id: 'manager', title: 'SOC Manager', band: 'l3', xp: 40000, gates: [{ type: 'all-tiers' }, { type: 'scenario', id: 'major-incident', title: 'Major incident capstone' }] },
 ];
