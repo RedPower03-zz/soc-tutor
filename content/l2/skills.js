@@ -120,4 +120,13 @@ export const L2_SKILLS = [
     prereqs: ['l2-siem', 'host-processes'],
     summary: 'Read short PowerShell, Python and Bash safely, spot malicious PowerShell in text, regex for logs, JSON vs CSV, and playbook step order.',
   },
+  {
+    id: 'l2-saas',
+    name: 'Cloud & SaaS identity',
+    track: 'soc',
+    level: 2,
+    order: 32,
+    prereqs: ['l2-phishing', 'l2-alert-triage'],
+    summary: 'Entra sign-in codes, M365 audit, Okta, AiTM, MFA fatigue, illicit OAuth consent, impossible-travel caveats and session revocation.',
+  },
 ];

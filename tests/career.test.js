@@ -75,8 +75,9 @@ test('XP budget: finishing Level 1 + 2 plus operations lands on Senior Analyst I
   assert.ok(b.atTotal.xp >= G.RANKS.find((r) => r.id === 'senior-1').xp, 'enough XP for Senior Analyst I');
   assert.equal(b.atTotal.rank.id, 'senior-1');
   assert.ok(b.atTotal.ladderPct >= 50 && b.atTotal.ladderPct <= 65, `${b.atTotal.ladderPct}%`);
-  assert.ok(b.atTotal.level <= G.MAX_LEVEL * 0.55, `level ${b.atTotal.level} of ${G.MAX_LEVEL}`);
-  assert.ok(b.atMonth.level <= G.MAX_LEVEL * 0.6, 'a month of reviews on top stays well under max level');
+  // 0.60 / 0.65: L1+L2 grew past the old 55% line (level 33) when l2-saas landed at level 34.
+  assert.ok(b.atTotal.level <= G.MAX_LEVEL * 0.6, `level ${b.atTotal.level} of ${G.MAX_LEVEL}`);
+  assert.ok(b.atMonth.level <= G.MAX_LEVEL * 0.65, 'a month of reviews on top stays well under max level');
   assert.ok(b.withMonth < G.RANKS.find((r) => r.id === 'senior-2').xp, 'Level 3 ranks still need Level 3 XP');
   // Level 1 alone still tops out at Tier 1 Analyst III, below the Level 2 thresholds' reach
   const l1 = {

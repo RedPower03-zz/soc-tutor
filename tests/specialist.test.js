@@ -8,7 +8,7 @@ import * as E from '../js/engine.js';
 import { CONTENT } from '../content/index.js';
 
 const idx = E.indexContent(CONTENT);
-const SPECIALIST = ['l2-vuln', 'l2-web', 'l2-ids', 'l2-intel', 'l2-scripting'];
+const SPECIALIST = ['l2-vuln', 'l2-web', 'l2-ids', 'l2-intel', 'l2-scripting', 'l2-saas'];
 const HIGHER = new Set(['apply', 'analyze', 'evaluate', 'create']);
 const BLOOM = new Set(['remember', 'understand', ...HIGHER]);
 const itemsOf = (id) => CONTENT.items.filter((i) => i.skill === id);
@@ -102,4 +102,12 @@ test('scripting anchors: encoded PowerShell, 4104, regex, JSON, playbook order',
   const s = text('l2-scripting');
   for (const k of ['-enc', '4104', 'utf-16', 'downloadstring', 'iex', '\\d', 'trailing comma', 'revoke', 'break-glass', 't1059.001'])
     assert.ok(s.includes(k), `scripting: ${k}`);
+});
+
+test('cloud identity anchors: Entra codes, M365 audit, Okta, AiTM, consent, revoke', () => {
+  const s = text('l2-saas');
+  for (const k of ['50126', '53003', '50074', '50076', '50079', '500121', '50058', 't1557', 't1621', 't1528', 't1550.004', 'mailitemsaccessed', 'consent to application', 'offline_access', 'revoke', 'impossible travel', 'user.session.start', 'fido2', 'continuous access'])
+    assert.ok(s.includes(k), `saas: ${k}`);
+  assert.equal(CONTENT.items.find((i) => i.id === 'ci-02').accept[0], '53003');
+  assert.equal(CONTENT.items.find((i) => i.id === 'ci-10').accept[0], '50074');
 });
