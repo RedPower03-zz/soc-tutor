@@ -35,6 +35,16 @@ The course is planned as three curriculum levels (`content/career.js` → `TIERS
 | **Level 2 SOC Operations** | Alert triage, SIEM & log analysis, phishing analysis, malware analysis basics, MITRE ATT&CK, incident response, threat hunting (7 skills) plus 4 Level 2 SIEM cases and the *Night-shift lead* capstone | Live |
 | **Level 3 Advanced** | PKI & certificates, applied cryptography, identity/AD & Kerberos, cloud security, digital forensics, detection engineering (6 skills) plus 4 Level 3 SIEM cases and the *Major incident* capstone | Live |
 
+## Hands-on labs
+
+The dashboard has three labs. All of the data is fictional.
+
+- **Query lab.** A practical subset of Splunk SPL and Kusto (KQL): filter, `stats` / `summarize count by`, sort, `head` / `take`, `table` / `project`, `dedup` / `distinct`, and time bounds, plus a few hunt helpers (`eval`, `bin`, `rex`). Twelve challenges over large noisy datasets. You are graded on the **result set**, not on the query text, in either language. The same engine sits on the SIEM case screen as a query bar. Other content can register another log source with `registerDataset()` in `content/lab/datasets.js`.
+- **Packet lab.** A phone-friendly capture viewer: frame list, protocol tree, follow stream, and a small display filter (`tcp`, `ip.addr == …`, `frame contains "…"`). Seven short cases.
+- **Rule lab.** Sigma-lite and YARA-lite. A rule is replayed against labelled samples and scored on true positives, false positives and false negatives.
+
+Write-ups and capstone reports accept synonym groups. Pasting the answer key, or repeating one word to clear the length minimum, scores nothing.
+
 To add a tier or track later: add its skills to `content/skills.js` with a `track`, list the track in the tier's `tracks`, and flip `status` to `available`. Rank gates, the dashboard tier bars and the career view all read from this data, so no code changes are needed.
 
 ## How to run it on your computer

@@ -1,4 +1,5 @@
 // SIEM investigation mode: pure logic (no DOM), unit-tested in tests/siem.test.js.
+import { scoreKeywordRubric } from './rubric.js';
 // Filtering/searching the case log table, tracking the investigation, and scoring it.
 
 export const WEIGHTS = { verdict: 45, evidence: 35, efficiency: 10, writeup: 10 };
@@ -169,15 +170,14 @@ export function scoreCase(c, sub) {
   // No evidence found at all means there was no real investigation to be efficient about.
   const efficiency = { queries: q, par, points: found.length ? effPoints : 0, max: WEIGHTS.efficiency };
 
-  // write-up
-  const text = String(sub.writeup || '').toLowerCase();
-  const long = text.trim().length >= MIN_WRITEUP;
-  const hits = long ? c.writeup.filter((w) => w.any.some((k) => text.includes(k.toLowerCase()))) : [];
+  // write-up: synonym groups, and a keyword dump does not count
+  const graded = scoreKeywordRubric(sub.writeup, c.writeup, { minLength: MIN_WRITEUP });
   const writeup = {
-    tooShort: !long,
-    hits: hits.map((w) => w.label),
-    misses: c.writeup.filter((w) => !hits.includes(w)).map((w) => w.label),
-    points: Math.round((hits.length / c.writeup.length) * WEIGHTS.writeup),
+    tooShort: graded.tooShort,
+    stuffed: graded.stuffed,
+    hits: graded.hits,
+    misses: graded.misses,
+    points: Math.round(graded.credit * WEIGHTS.writeup),
     max: WEIGHTS.writeup,
   };
 
@@ -199,14 +199,13 @@ function scoreEvidence(c, pins, weight, perNoise, maxNoise) {
 }
 
 function scoreWriteup(c, text, weight) {
-  const t = String(text || '').toLowerCase();
-  const long = t.trim().length >= MIN_WRITEUP;
-  const hits = long ? c.writeup.filter((w) => w.any.some((k) => t.includes(k.toLowerCase()))) : [];
+  const graded = scoreKeywordRubric(text, c.writeup, { minLength: MIN_WRITEUP });
   return {
-    tooShort: !long,
-    hits: hits.map((w) => w.label),
-    misses: c.writeup.filter((w) => !hits.includes(w)).map((w) => w.label),
-    points: Math.round((hits.length / c.writeup.length) * weight),
+    tooShort: graded.tooShort,
+    stuffed: graded.stuffed,
+    hits: graded.hits,
+    misses: graded.misses,
+    points: Math.round(graded.credit * weight),
     max: weight,
   };
 }

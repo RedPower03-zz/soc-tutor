@@ -1,0 +1,161 @@
+// Fictional packet cases for the phone packet lab. Every address is RFC 5737 or private.
+// Frames are dissected objects; js/lab/packets.js builds the tree and the display filter.
+
+const eth = (src, dst) => [src, dst];
+const GW = '02:00:00:00:00:01';
+const WS = '02:00:00:aa:00:12';
+const SRV = '02:00:00:bb:00:21';
+
+export const PACKET_CASES = [
+  {
+    id: 'pkt-health',
+    level: 1,
+    difficulty: 1,
+    skill: 'net-tcp-udp',
+    title: 'Three packets, one page',
+    brief: 'A workstation fetched a health page from an internal web server. The capture is the whole conversation.',
+    tasks: [
+      { id: 'server', prompt: 'What is the web server IP?', accept: ['10.10.2.21'] },
+      { id: 'method', prompt: 'What HTTP method did the client use?', accept: ['get'] },
+      { id: 'path', prompt: 'What path was requested?', accept: ['/health', '/health.html'] },
+    ],
+    explain: 'SYN, SYN-ACK, ACK is the handshake. The GET is the first packet with data from the client (port 51234) to port 80. The server answers 200 with a short body.',
+    packets: [
+      { id: 'h1', no: 1, time: 0, len: 66, stream: 'h', eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 51234, dport: 80, flags: { syn: 1 }, seq: 1 }, info: '51234 → 80 [SYN]' },
+      { id: 'h2', no: 2, time: 0.012, len: 66, stream: 'h', eth: eth(SRV, GW), ip: { src: '10.10.2.21', dst: '10.10.3.32', proto: 'TCP' }, tcp: { sport: 80, dport: 51234, flags: { syn: 1, ack: 1 }, seq: 100, ack: 2 }, info: '80 → 51234 [SYN, ACK]' },
+      { id: 'h3', no: 3, time: 0.013, len: 54, stream: 'h', eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 51234, dport: 80, flags: { ack: 1 }, seq: 2, ack: 101 }, info: '51234 → 80 [ACK]' },
+      { id: 'h4', no: 4, time: 0.02, len: 140, stream: 'h', eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 51234, dport: 80, flags: { psh: 1, ack: 1 }, seq: 2, ack: 101 }, http: { method: 'GET', host: 'app.corp.example', uri: '/health' }, raw: 'GET /health HTTP/1.1\nHost: app.corp.example\nUser-Agent: CorpCheck/1.2', info: 'GET /health HTTP/1.1' },
+      { id: 'h5', no: 5, time: 0.028, len: 200, stream: 'h', eth: eth(SRV, GW), ip: { src: '10.10.2.21', dst: '10.10.3.32', proto: 'TCP' }, tcp: { sport: 80, dport: 51234, flags: { psh: 1, ack: 1 }, seq: 101, ack: 90 }, http: { status: 200, body: 'ok' }, raw: 'HTTP/1.1 200 OK\nContent-Length: 2\n\nok', info: 'HTTP/1.1 200 OK' },
+    ],
+  },
+  {
+    id: 'pkt-synscan',
+    level: 1,
+    difficulty: 2,
+    skill: 'net-fw-logs',
+    title: 'Half-open doors',
+    brief: 'The server VLAN saw a burst of SYNs with no handshake finished. One internal scanner is authorised; this source is not.',
+    tasks: [
+      { id: 'src', prompt: 'Which source IP is scanning?', accept: ['203.0.113.77'] },
+      { id: 'kind', prompt: 'What kind of scan is this (the flag pattern)?', accept: ['syn', 'half-open', 'half open', 'stealth'] },
+      { id: 'target', prompt: 'Which server IP is the target?', accept: ['10.10.2.21'] },
+    ],
+    explain: 'A SYN with no following ACK from the scanner is a half-open scan: the scanner notes SYN-ACK or RST and never completes the handshake. 10.0.9.5 is the vulnerability scanner and only hits 22, 80 and 443.',
+    packets: [
+      { id: 's1', no: 1, time: 0, len: 60, eth: eth('02:00:00:cc:00:09', GW), ip: { src: '10.0.9.5', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 44000, dport: 22, flags: { syn: 1 }, seq: 1 }, info: '10.0.9.5 → 22 [SYN]' },
+      { id: 's2', no: 2, time: 0.01, len: 60, eth: eth('02:00:00:cc:00:09', GW), ip: { src: '10.0.9.5', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 44001, dport: 80, flags: { syn: 1 }, seq: 1 }, info: '10.0.9.5 → 80 [SYN]' },
+      { id: 's3', no: 3, time: 0.02, len: 60, eth: eth('02:00:00:cc:00:09', GW), ip: { src: '10.0.9.5', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 44002, dport: 443, flags: { syn: 1 }, seq: 1 }, info: '10.0.9.5 → 443 [SYN]' },
+      { id: 's4', no: 4, time: 1.0, len: 60, eth: eth('02:aa:00:00:00:77', GW), ip: { src: '203.0.113.77', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 40001, dport: 21, flags: { syn: 1 }, seq: 1 }, info: '203.0.113.77 → 21 [SYN]' },
+      { id: 's5', no: 5, time: 1.01, len: 60, eth: eth('02:aa:00:00:00:77', GW), ip: { src: '203.0.113.77', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 40002, dport: 22, flags: { syn: 1 }, seq: 1 }, info: '203.0.113.77 → 22 [SYN]' },
+      { id: 's6', no: 6, time: 1.02, len: 60, eth: eth('02:aa:00:00:00:77', GW), ip: { src: '203.0.113.77', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 40003, dport: 23, flags: { syn: 1 }, seq: 1 }, info: '203.0.113.77 → 23 [SYN]' },
+      { id: 's7', no: 7, time: 1.03, len: 60, eth: eth('02:aa:00:00:00:77', GW), ip: { src: '203.0.113.77', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 40004, dport: 25, flags: { syn: 1 }, seq: 1 }, info: '203.0.113.77 → 25 [SYN]' },
+      { id: 's8', no: 8, time: 1.04, len: 60, eth: eth('02:aa:00:00:00:77', GW), ip: { src: '203.0.113.77', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 40005, dport: 445, flags: { syn: 1 }, seq: 1 }, info: '203.0.113.77 → 445 [SYN]' },
+      { id: 's9', no: 9, time: 1.05, len: 54, eth: eth(SRV, GW), ip: { src: '10.10.2.21', dst: '203.0.113.77', proto: 'TCP' }, tcp: { sport: 22, dport: 40002, flags: { syn: 1, ack: 1 }, seq: 9, ack: 2 }, info: '22 → 203.0.113.77 [SYN, ACK]' },
+      { id: 's10', no: 10, time: 1.06, len: 54, eth: eth(SRV, GW), ip: { src: '10.10.2.21', dst: '203.0.113.77', proto: 'TCP' }, tcp: { sport: 23, dport: 40003, flags: { rst: 1, ack: 1 }, seq: 0, ack: 2 }, info: '23 → 203.0.113.77 [RST, ACK]' },
+    ],
+  },
+  {
+    id: 'pkt-dns',
+    level: 1,
+    difficulty: 2,
+    skill: 'net-dns',
+    title: 'Name that should not resolve',
+    brief: 'A host asked DNS for a few names. One of them is not a name this company uses.',
+    tasks: [
+      { id: 'client', prompt: 'Which client IP sent the suspicious query?', accept: ['10.10.3.32'] },
+      { id: 'name', prompt: 'What suspicious name was queried?', accept: ['login-secure-update.example'] },
+      { id: 'rcode', prompt: 'What was the response code for that name?', accept: ['nxdomain'] },
+    ],
+    explain: 'The A query for login-secure-update.example comes back NXDOMAIN. corp.example and the NTP pool are normal. NXDOMAIN on a lookalike name is worth a ticket even when nothing connected afterwards.',
+    packets: [
+      { id: 'd1', no: 1, time: 0, len: 80, stream: 'd1', eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '10.10.1.10', proto: 'UDP' }, udp: { sport: 53001, dport: 53 }, dns: { qry: 'intranet.corp.example', type: 'A' }, info: 'Standard query A intranet.corp.example' },
+      { id: 'd2', no: 2, time: 0.004, len: 96, stream: 'd1', eth: eth(GW, WS), ip: { src: '10.10.1.10', dst: '10.10.3.32', proto: 'UDP' }, udp: { sport: 53, dport: 53001 }, dns: { qry: 'intranet.corp.example', type: 'A', answer: '10.10.2.21', rcode: 'NOERROR', qr: 1 }, info: 'A intranet.corp.example → 10.10.2.21' },
+      { id: 'd3', no: 3, time: 0.2, len: 90, stream: 'd2', eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '10.10.1.10', proto: 'UDP' }, udp: { sport: 53002, dport: 53 }, dns: { qry: 'login-secure-update.example', type: 'A' }, info: 'Standard query A login-secure-update.example' },
+      { id: 'd4', no: 4, time: 0.21, len: 90, stream: 'd2', eth: eth(GW, WS), ip: { src: '10.10.1.10', dst: '10.10.3.32', proto: 'UDP' }, udp: { sport: 53, dport: 53002 }, dns: { qry: 'login-secure-update.example', type: 'A', rcode: 'NXDOMAIN', qr: 1 }, info: 'NXDOMAIN login-secure-update.example' },
+      { id: 'd5', no: 5, time: 1.0, len: 78, eth: eth('02:00:00:aa:00:09', GW), ip: { src: '10.10.4.29', dst: '10.10.1.10', proto: 'UDP' }, udp: { sport: 48000, dport: 53 }, dns: { qry: 'pool.ntp.example', type: 'A' }, info: 'Standard query A pool.ntp.example' },
+    ],
+  },
+  {
+    id: 'pkt-cleartext',
+    level: 2,
+    difficulty: 2,
+    skill: 'net-http',
+    title: 'Password on the wire',
+    brief: 'Someone logged into an admin page. The capture is on the path between the laptop and the server. Decide whether the secret stayed on the wire.',
+    tasks: [
+      { id: 'host', prompt: 'Which website host was posted to?', accept: ['admin.corp.example'] },
+      { id: 'user', prompt: 'What username was submitted?', accept: ['ops.admin'] },
+      { id: 'why', prompt: 'Why can you read the password? (protocol)', accept: ['http', 'cleartext', 'clear text', 'not encrypted', 'port 80', 'plaintext'] },
+    ],
+    explain: 'The POST is HTTP on port 80, so the body is readable: user=ops.admin&password=Winter2026!. The later TLS client hello to the same host on 443 does not contain the password. Anything that can see this segment can reuse the password.',
+    packets: [
+      { id: 'c1', no: 1, time: 0, len: 74, stream: 'c', eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 51500, dport: 80, flags: { syn: 1 }, seq: 1 }, info: '51500 → 80 [SYN]' },
+      { id: 'c2', no: 2, time: 0.01, len: 74, stream: 'c', eth: eth(SRV, GW), ip: { src: '10.10.2.21', dst: '10.10.3.32', proto: 'TCP' }, tcp: { sport: 80, dport: 51500, flags: { syn: 1, ack: 1 }, seq: 50, ack: 2 }, info: '80 → 51500 [SYN, ACK]' },
+      { id: 'c3', no: 3, time: 0.04, len: 220, stream: 'c', eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 51500, dport: 80, flags: { psh: 1, ack: 1 }, seq: 2, ack: 51 }, http: { method: 'POST', host: 'admin.corp.example', uri: '/login', body: 'user=ops.admin&password=Winter2026!' }, raw: 'POST /login HTTP/1.1\nHost: admin.corp.example\nContent-Type: application/x-www-form-urlencoded\n\nuser=ops.admin&password=Winter2026!', info: 'POST /login HTTP/1.1' },
+      { id: 'c4', no: 4, time: 0.06, len: 160, stream: 'c', eth: eth(SRV, GW), ip: { src: '10.10.2.21', dst: '10.10.3.32', proto: 'TCP' }, tcp: { sport: 80, dport: 51500, flags: { psh: 1, ack: 1 }, seq: 51, ack: 180 }, http: { status: 302 }, raw: 'HTTP/1.1 302 Found\nLocation: /home', info: 'HTTP/1.1 302 Found' },
+      { id: 'c5', no: 5, time: 2.0, len: 180, stream: 't', eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '10.10.2.21', proto: 'TCP' }, tcp: { sport: 51510, dport: 443, flags: { psh: 1, ack: 1 }, seq: 1, ack: 1 }, tls: { sni: 'admin.corp.example', msg: 'Client Hello' }, info: 'Client Hello SNI=admin.corp.example' },
+    ],
+  },
+  {
+    id: 'pkt-rst',
+    level: 2,
+    difficulty: 2,
+    skill: 'net-tcp-udp',
+    title: 'Who hung up?',
+    brief: 'A client started a session to a file server on SMB and the connection died. Find which side sent the reset, and the port.',
+    tasks: [
+      { id: 'who', prompt: 'Which IP sent the RST?', accept: ['10.10.2.40'] },
+      { id: 'port', prompt: 'What destination port was the client trying to use?', accept: ['445'] },
+      { id: 'flag', prompt: 'Which TCP flag ends the connection here?', accept: ['rst', 'reset'] },
+    ],
+    explain: 'The handshake completes, the client sends data, and 10.10.2.40 answers with RST, ACK. The reset comes from the server side (or a middlebox using the server IP), not from the client. Port 445 is SMB.',
+    packets: [
+      { id: 'r1', no: 1, time: 0, len: 66, stream: 'r', eth: eth(WS, GW), ip: { src: '10.10.3.40', dst: '10.10.2.40', proto: 'TCP' }, tcp: { sport: 49821, dport: 445, flags: { syn: 1 }, seq: 1 }, info: '49821 → 445 [SYN]' },
+      { id: 'r2', no: 2, time: 0.008, len: 66, stream: 'r', eth: eth(SRV, GW), ip: { src: '10.10.2.40', dst: '10.10.3.40', proto: 'TCP' }, tcp: { sport: 445, dport: 49821, flags: { syn: 1, ack: 1 }, seq: 800, ack: 2 }, info: '445 → 49821 [SYN, ACK]' },
+      { id: 'r3', no: 3, time: 0.009, len: 54, stream: 'r', eth: eth(WS, GW), ip: { src: '10.10.3.40', dst: '10.10.2.40', proto: 'TCP' }, tcp: { sport: 49821, dport: 445, flags: { ack: 1 }, seq: 2, ack: 801 }, info: '49821 → 445 [ACK]' },
+      { id: 'r4', no: 4, time: 0.04, len: 160, stream: 'r', eth: eth(WS, GW), ip: { src: '10.10.3.40', dst: '10.10.2.40', proto: 'TCP' }, tcp: { sport: 49821, dport: 445, flags: { psh: 1, ack: 1 }, seq: 2, ack: 801 }, raw: 'SMB Negotiate Protocol Request', info: 'SMB Negotiate' },
+      { id: 'r5', no: 5, time: 0.041, len: 54, stream: 'r', eth: eth(SRV, GW), ip: { src: '10.10.2.40', dst: '10.10.3.40', proto: 'TCP' }, tcp: { sport: 445, dport: 49821, flags: { rst: 1, ack: 1 }, seq: 801, ack: 100 }, info: '445 → 49821 [RST, ACK]' },
+    ],
+  },
+  {
+    id: 'pkt-tunnel',
+    level: 2,
+    difficulty: 3,
+    skill: 'l2-hunting',
+    title: 'Questions that are too long',
+    brief: 'DNS from one laptop looks wrong: the names are huge and unique, and they are TXT lookups. Find that client.',
+    tasks: [
+      { id: 'client', prompt: 'Which client IP is sending the long names?', accept: ['10.20.7.31'] },
+      { id: 'type', prompt: 'What DNS query type are those long names?', accept: ['txt'] },
+      { id: 'why', prompt: 'What technique does this pattern suggest?', accept: ['tunnel', 'dns tunnel', 'exfil', 'exfiltration'] },
+    ],
+    explain: '10.20.7.31 sends many unique TXT queries whose first label is dozens of characters under t.sync-data.example. That is how DNS tunnelling carries data. The short A lookup for windowsupdate.example from another host is ordinary.',
+    packets: [
+      { id: 't1', no: 1, time: 0, len: 90, eth: eth(WS, GW), ip: { src: '10.10.3.18', dst: '10.10.1.10', proto: 'UDP' }, udp: { sport: 51000, dport: 53 }, dns: { qry: 'windowsupdate.example', type: 'A' }, info: 'A windowsupdate.example' },
+      { id: 't2', no: 2, time: 0.1, len: 180, eth: eth('02:00:00:aa:07:31', GW), ip: { src: '10.20.7.31', dst: '10.10.1.10', proto: 'UDP' }, udp: { sport: 60001, dport: 53 }, dns: { qry: 'aGVsbG8td29ybGQtZGF0YS1jaHVuay0x.t.sync-data.example', type: 'TXT' }, info: 'TXT long label .t.sync-data.example' },
+      { id: 't3', no: 3, time: 0.4, len: 180, eth: eth('02:00:00:aa:07:31', GW), ip: { src: '10.20.7.31', dst: '10.10.1.10', proto: 'UDP' }, udp: { sport: 60002, dport: 53 }, dns: { qry: 'bmV4dC1jaHVuay1vZi1maWxlLWRhdGEtMgo.t.sync-data.example', type: 'TXT' }, info: 'TXT long label .t.sync-data.example' },
+      { id: 't4', no: 4, time: 0.7, len: 180, eth: eth('02:00:00:aa:07:31', GW), ip: { src: '10.20.7.31', dst: '10.10.1.10', proto: 'UDP' }, udp: { sport: 60003, dport: 53 }, dns: { qry: 'dGhpcmQtY2h1bmstc3RpbGwtbm90LWEtd2Vi.t.sync-data.example', type: 'TXT' }, info: 'TXT long label .t.sync-data.example' },
+      { id: 't5', no: 5, time: 0.71, len: 120, eth: eth(GW, '02:00:00:aa:07:31'), ip: { src: '10.10.1.10', dst: '10.20.7.31', proto: 'UDP' }, udp: { sport: 53, dport: 60003 }, dns: { qry: 'dGhpcmQtY2h1bmstc3RpbGwtbm90LWEtd2Vi.t.sync-data.example', type: 'TXT', answer: 'ok', rcode: 'NOERROR', qr: 1 }, info: 'TXT response ok' },
+    ],
+  },
+  {
+    id: 'pkt-beacon',
+    level: 3,
+    difficulty: 2,
+    skill: 'l2-hunting',
+    title: 'Hello, on a timer',
+    brief: 'Three TLS client hellos leave one workstation for the same odd name, about a minute apart. A fourth hello is a normal Microsoft site.',
+    tasks: [
+      { id: 'src', prompt: 'Which source IP is beaconing?', accept: ['10.20.4.17'] },
+      { id: 'sni', prompt: 'What SNI (server name) is it calling?', accept: ['cdn-update.example.net'] },
+      { id: 'gap', prompt: 'About how many seconds are there between its hellos?', accept: ['60', 'minute', '1 min', 'one minute'] },
+    ],
+    explain: '10.20.4.17 sends a Client Hello to cdn-update.example.net at t=0, t=60 and t=120. Even spacing plus a name that is not the company CDN is beaconing. The hello to outlook.office.example is a different host and a different name.',
+    packets: [
+      { id: 'b1', no: 1, time: 0, len: 220, stream: 'b1', eth: eth('02:00:00:aa:04:17', GW), ip: { src: '10.20.4.17', dst: '198.51.100.40', proto: 'TCP' }, tcp: { sport: 49100, dport: 443, flags: { psh: 1, ack: 1 }, seq: 1, ack: 1 }, tls: { sni: 'cdn-update.example.net', msg: 'Client Hello' }, info: 'Client Hello cdn-update.example.net' },
+      { id: 'b2', no: 2, time: 5, len: 210, eth: eth(WS, GW), ip: { src: '10.10.3.32', dst: '198.51.100.80', proto: 'TCP' }, tcp: { sport: 49200, dport: 443, flags: { psh: 1, ack: 1 }, seq: 1, ack: 1 }, tls: { sni: 'outlook.office.example', msg: 'Client Hello' }, info: 'Client Hello outlook.office.example' },
+      { id: 'b3', no: 3, time: 60, len: 220, stream: 'b2', eth: eth('02:00:00:aa:04:17', GW), ip: { src: '10.20.4.17', dst: '198.51.100.40', proto: 'TCP' }, tcp: { sport: 49111, dport: 443, flags: { psh: 1, ack: 1 }, seq: 1, ack: 1 }, tls: { sni: 'cdn-update.example.net', msg: 'Client Hello' }, info: 'Client Hello cdn-update.example.net' },
+      { id: 'b4', no: 4, time: 120, len: 220, stream: 'b3', eth: eth('02:00:00:aa:04:17', GW), ip: { src: '10.20.4.17', dst: '198.51.100.40', proto: 'TCP' }, tcp: { sport: 49122, dport: 443, flags: { psh: 1, ack: 1 }, seq: 1, ack: 1 }, tls: { sni: 'cdn-update.example.net', msg: 'Client Hello' }, info: 'Client Hello cdn-update.example.net' },
+    ],
+  },
+];

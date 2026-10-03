@@ -18,6 +18,7 @@ import { L3, withL3Skills, withL3Track } from './l3/index.js';
 import { L3_SIEM_CASES } from './l3/siem-cases.js';
 import { MAJOR_INCIDENT } from './l3/major-incident.js';
 import { MORE } from './more/index.js';
+import { LAB_CONTENT } from './lab/index.js';
 
 export const CONTENT = {
   tracks: withL3Track(withL2Track(TRACKS)),
@@ -28,4 +29,5 @@ export const CONTENT = {
   scenarios: [...SCENARIOS, NIGHT_SHIFT, MAJOR_INCIDENT],
   siemCases: [...SIEM_CASES, ...AMBIGUOUS_CASES, ...L2_SIEM_CASES, ...L3_SIEM_CASES],
   tiers: TIERS,
+  lab: LAB_CONTENT,
 };

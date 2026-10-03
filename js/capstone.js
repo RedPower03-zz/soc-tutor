@@ -1,3 +1,4 @@
+import { scoreKeywordRubric } from './rubric.js';
 // Capstone scenarios ("First shift as a Tier 1 analyst"): pure logic, unit-tested in
 // tests/capstone.test.js. Stage unlocks, stage scoring, the escalation rubric and completion.
 import * as E from './engine.js';
@@ -116,14 +117,13 @@ export function scoreEscalation(sc, report) {
     const def = F[field];
     const kind = fieldKind(def);
     if (kind === 'text') {
-      // keyword coverage of the rubric points
-      const text = String(report[field] || '').toLowerCase();
-      const long = text.trim().length >= (def.minLength || 0);
-      const hits = long ? def.rubric.filter((r) => r.any.some((k) => text.includes(k))) : [];
-      push(field, hits.length / def.rubric.length, {
-        tooShort: !long,
-        hits: hits.map((h) => h.label),
-        misses: def.rubric.filter((r) => !hits.includes(r)).map((r) => r.label),
+      // synonym groups; a bare keyword dump scores nothing
+      const graded = scoreKeywordRubric(report[field], def.rubric, { minLength: def.minLength || 0 });
+      push(field, graded.credit, {
+        tooShort: graded.tooShort,
+        stuffed: graded.stuffed,
+        hits: graded.hits,
+        misses: graded.misses,
       });
     } else if (kind === 'choice') {
       // graded single choice (severity, phase, ...)

@@ -9,6 +9,9 @@ import * as S from './siem.js';
 import * as C from './capstone.js';
 import { icon } from './icons.js';
 import { rankInsignia } from './insignia.js';
+import { runCaseQuery, caseStarter } from './lab/case-query.js';
+import { cellText, QueryError } from './lab/query.js';
+import { ensureLab } from './lab/lab.js';
 
 let ctx = null; // { getState, save, now, render, statusBar, panel, chip, esc, rich, pad, bar, xpToast, queueAchievements, refreshStatusXp, openLesson, renderHome, skillName, setScreen }
 
@@ -323,6 +326,7 @@ function openCase(id) {
   st().siem.active = inv;
   live = inv.query.text || '';
   openRow = null;
+  cqOut = null;
   ctx.save();
   renderInvestigation();
 }
@@ -383,8 +387,73 @@ function statusHtml(c, shown) {
   return `<span><b>${shown}</b>/${c.logs.length} events</span><span class="${over ? 'warn-text' : ''}">${inv.queries} search${inv.queries === 1 ? '' : 'es'} <em>(par ${c.parQueries})</em></span><span class="accent-text">${icon('pin')}${inv.pins.length}</span>`;
 }
 
-function resultsHtml(c) {
+/** Log rows after the filters and (if one ran) the query bar. */
+function visibleRows(c) {
   const rows = S.filterLogs(c, currentQuery());
+  if (!inv.cq?.ids) return rows;
+  const keep = new Set(inv.cq.ids);
+  return rows.filter((r) => keep.has(r.id));
+}
+
+// ------------------------------------------------------------------ query bar (SPL / KQL over the case logs)
+
+const cqDialect = () => ensureLab(st()).prefs.dialect || 'spl';
+let cqOut = null; // last query bar result (not persisted)
+
+function caseQueryHtml(c) {
+  const d = cqDialect();
+  const text = inv.cq?.text?.[d] ?? caseStarter(d);
+  return `<details class="case-q" ${inv.cq?.open ? 'open' : ''} id="siem-q-box">
+      <summary>${icon('terminal')}<span>Query bar <em>SPL / KQL</em></span>${inv.cq?.ids ? `<span class="chip info">${inv.cq.ids.length} rows kept</span>` : ''}</summary>
+      <div class="case-q-body">
+        <div class="qe-top"><div class="seg-toggle" role="radiogroup" aria-label="Query language">${['spl', 'kql'].map((x) => `<button type="button" role="radio" aria-checked="${x === d}" class="${x === d ? 'on' : ''}" data-action="siem-q-dialect" data-d="${x}">${x.toUpperCase()}</button>`).join('')}</div>
+          <span class="qe-src mono">${d === 'kql' ? 'CaseLogs' : 'index=case'}</span></div>
+        <textarea id="siem-q" class="qe-text" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-label="Query">${esc(text)}</textarea>
+        <p class="small muted">Fields are extracted from each message (e.g. <code>src_ip</code>, <code>dest_port</code>, <code>EventCode</code>, <code>Account</code>). Event results filter the log list below; stats show a table. Each new query counts as a search.</p>
+        <div class="qe-actions"><button class="btn mini primary" data-action="siem-q-run">${icon('play')}Run</button><button class="btn mini ghost" data-action="siem-q-clear">${icon('reset')}Clear</button></div>
+        <div id="siem-q-out">${caseQueryOut()}</div>
+      </div>
+    </details>`;
+}
+
+function caseQueryOut() {
+  if (!cqOut) return '';
+  if (cqOut.err) return `<div class="alert crit q-err"><div class="alert-tag">${icon('x')}<span>Query error</span></div><div class="alert-msg mono">${esc(cqOut.err.message)}</div>${cqOut.err.hint ? `<div class="alert-msg small">${esc(cqOut.err.hint)}</div>` : ''}</div>`;
+  const r = cqOut.res;
+  const notes = [...r.warnings.map((w) => `<li class="warn-text">${icon('alert')}${esc(w)}</li>`), ...r.notes.map((n) => `<li class="muted">${esc(n)}</li>`)].join('');
+  if (r.ids) return `<p class="small mono accent-text">${r.ids.length} matching event${r.ids.length === 1 ? '' : 's'} kept in the log list below.</p>${notes ? `<ul class="qr-notes small">${notes}</ul>` : ''}`;
+  const rows = r.rows.slice(0, 100);
+  return `<div class="qr-meta mono"><span><b>${r.total}</b> rows</span></div>${notes ? `<ul class="qr-notes small">${notes}</ul>` : ''}
+    <div class="qr-wrap"><table class="qr"><thead><tr>${r.columns.map((col) => `<th>${esc(col)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${r.columns.map((col) => `<td>${esc(cellText(row[col]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function runCaseQueryBar(c) {
+  const d = cqDialect();
+  const text = document.getElementById('siem-q')?.value ?? '';
+  inv.cq = { ...(inv.cq || {}), open: true, text: { ...(inv.cq?.text || {}), [d]: text } };
+  try {
+    const res = runCaseQuery(c, text, d);
+    cqOut = { res };
+    inv.cq.ids = res.ids && res.ids.length < c.logs.length ? res.ids : res.ids ? null : inv.cq.ids ?? null;
+    if (!res.ids) inv.cq.ids = null;
+  } catch (err) {
+    cqOut = { err: err instanceof QueryError ? err : { message: 'Something went wrong running that query.', hint: String(err.message || err) } };
+  }
+  const key = `${d}:${text.trim()}`;
+  if (!cqOut.err && key !== inv.cq.lastKey) {
+    inv.cq.lastKey = key;
+    inv.queries += 1;
+  }
+  openRow = null;
+  ctx.save();
+  document.getElementById('siem-q-out').innerHTML = caseQueryOut();
+  const sum = document.querySelector('#siem-q-box summary');
+  if (sum) sum.innerHTML = `${icon('terminal')}<span>Query bar <em>SPL / KQL</em></span>${inv.cq.ids ? `<span class="chip info">${inv.cq.ids.length} rows kept</span>` : ''}`;
+  refreshResults();
+}
+
+function resultsHtml(c) {
+  const rows = visibleRows(c);
   const pins = new Set(inv.pins);
   return {
     count: rows.length,
@@ -457,6 +526,7 @@ function renderInvestigation() {
       <div class="lookup-bar">${icon('search')}<input id="intel-lookup-input" type="search" inputmode="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Lookup IP, domain or hash" aria-label="Indicator to look up" value="${esc(inv.enrich?.indicator || '')}"><button class="btn mini primary" data-action="siem-lookup-go">Lookup</button></div>
       <div id="intel-lookup-body">${lookupHtml(inv.enrich?.indicator ? lookupIndicator(inv.enrich.indicator) : null)}</div>
     </section>
+    ${caseQueryHtml(c)}
     <ol class="log-list" id="siem-results">${res.html}</ol>
     <div class="siem-tray" id="siem-tray">${trayHtml()}</div>
     </div>
@@ -519,7 +589,7 @@ function refreshResults() {
 function updateStatus() {
   const c = caseById(inv.caseId);
   const el = document.getElementById('siem-status');
-  if (el) el.innerHTML = statusHtml(c, S.filterLogs(c, currentQuery()).length);
+  if (el) el.innerHTML = statusHtml(c, visibleRows(c).length);
 }
 function refreshPins() {
   const c = caseById(inv.caseId);
@@ -605,7 +675,7 @@ function renderSiemFeedback() {
           ${scoreRow('Verdict', r.verdict.points, r.verdict.max, verdictOk ? 'correct' : r.verdict.points ? 'partial credit' : 'wrong')}
           ${scoreRow('Key evidence', r.evidence.points, r.evidence.max, `${r.evidence.found.length}/${c.key.length} found${r.evidence.penalty ? ` · −${r.evidence.penalty} for ${r.evidence.noise.length} noise pin${r.evidence.noise.length === 1 ? '' : 's'}` : ''}`)}
           ${scoreRow('Efficiency', r.efficiency.points, r.efficiency.max, `${r.efficiency.queries} searches · par ${r.efficiency.par}`)}
-          ${scoreRow('Write-up', r.writeup.points, r.writeup.max, r.writeup.tooShort ? 'too short to count' : `${r.writeup.hits.length}/${c.writeup.length} points covered`)}
+          ${scoreRow('Write-up', r.writeup.points, r.writeup.max, r.writeup.tooShort ? 'too short to count' : r.writeup.stuffed ? 'keyword list, not a write-up' : `${r.writeup.hits.length}/${c.writeup.length} points covered`)}
         </ul>
         ${xp.xp ? `<div class="xp-earned"><div class="label row"><span>XP earned</span><b class="mono xp-gain">+${xp.xp} XP</b></div><ul class="xp-list">${xp.breakdown.map((b) => `<li><span>${esc(b.label)}</span><span class="mono">+${b.amount}</span></li>`).join('')}</ul></div>` : `<p class="small muted">No new XP: you have already been paid for a score of ${st().siem.cases[c.id].paid || 0}. Beat it to earn more.</p>`}`,
     })}
@@ -695,7 +765,7 @@ function renderAmbiguousFeedback(c, sub, r, rec, xp) {
           ${scoreRow('Next steps', r.steps.points, r.steps.max, `${r.steps.best.length}/${r.steps.best.length + r.steps.missed.length} best${r.steps.bad.length ? ` · ${r.steps.bad.length} harmful` : ''}`)}
           ${scoreRow('Confidence', r.confidence.points, r.confidence.max, CONF_NOTE[r.confidence.note], r.confidence.note === 'overconfident' ? 'crit' : '')}
           ${scoreRow('Evidence', r.evidence.points, r.evidence.max, `${r.evidence.found.length}/${c.key.length} found${r.evidence.penalty ? ` · −${r.evidence.penalty} noise` : ''}`)}
-          ${scoreRow('Write-up', r.writeup.points, r.writeup.max, r.writeup.tooShort ? 'too short to count' : `${r.writeup.hits.length}/${c.writeup.length} points covered`)}
+          ${scoreRow('Write-up', r.writeup.points, r.writeup.max, r.writeup.tooShort ? 'too short to count' : r.writeup.stuffed ? 'keyword list, not a write-up' : `${r.writeup.hits.length}/${c.writeup.length} points covered`)}
         </ul>
         ${r.confidence.note === 'overconfident' ? `<p class="small crit-text conf-warn">${icon('alert')}"High" means the data proves it. On a case where key facts are missing, that's overconfidence, even if your call turns out right.</p>` : ''}
         ${xp.xp ? `<div class="xp-earned"><div class="label row"><span>XP earned</span><b class="mono xp-gain">+${xp.xp} XP</b></div><ul class="xp-list">${xp.breakdown.map((b) => `<li><span>${esc(b.label)}</span><span class="mono">+${b.amount}</span></li>`).join('')}</ul></div>` : `<p class="small muted">No new XP: you have already been paid for a score of ${st().siem.cases[c.id].paid || 0}. Beat it to earn more.</p>`}`,
@@ -991,9 +1061,9 @@ function renderEscalationResult(sc) {
     const d = row.detail;
     const kind = C.fieldKind(F[row.field]);
     if (kind === 'text') {
-      return d.tooShort
-        ? `<p class="small crit-text">Too short to score (at least ${F[row.field].minLength} characters).</p>`
-        : `<ul class="rub-items">${d.hits.map((h) => `<li class="ok-text">${icon('check')}${esc(h)}</li>`).join('')}${d.misses.map((h) => `<li class="warn-text">${icon('x')}Missing: ${esc(h)}</li>`).join('')}</ul>`;
+      if (d.tooShort) return `<p class="small crit-text">Too short to score (at least ${F[row.field].minLength} characters).</p>`;
+      if (d.stuffed) return `<p class="small crit-text">That reads like a keyword list. Write what happened in sentences; synonyms are fine, a dump of the answer key is not.</p>`;
+      return `<ul class="rub-items">${d.hits.map((h) => `<li class="ok-text">${icon('check')}${esc(h)}</li>`).join('')}${d.misses.map((h) => `<li class="warn-text">${icon('x')}Missing: ${esc(h)}</li>`).join('')}</ul>`;
     }
     if (kind === 'choice') return `<p class="small">You: <b>${esc(choiceLabel(F[row.field], d.given))}</b> · Model: <b>${esc(choiceLabel(F[row.field], d.model))}</b></p>`;
     const label = (v) => optLabel(row.field, v);
@@ -1070,6 +1140,35 @@ function submitEscalation(sc) {
 /** Click actions owned by this module. Returns true when handled. */
 export function handleClick(action, el) {
   switch (action) {
+    case 'siem-q-run':
+      if (inv) runCaseQueryBar(caseById(inv.caseId));
+      return true;
+    case 'siem-q-clear': {
+      if (!inv) return true;
+      const d = cqDialect();
+      inv.cq = { ...(inv.cq || {}), ids: null, text: { ...(inv.cq?.text || {}), [d]: caseStarter(d) } };
+      cqOut = null;
+      const ta = document.getElementById('siem-q');
+      if (ta) ta.value = caseStarter(d);
+      document.getElementById('siem-q-out').innerHTML = '';
+      const sum = document.querySelector('#siem-q-box summary .chip');
+      if (sum) sum.remove();
+      ctx.save();
+      refreshResults();
+      return true;
+    }
+    case 'siem-q-dialect': {
+      if (!inv) return true;
+      const ta = document.getElementById('siem-q');
+      const d0 = cqDialect();
+      inv.cq = { ...(inv.cq || {}), open: true, text: { ...(inv.cq?.text || {}), [d0]: ta ? ta.value : '' } };
+      ensureLab(st()).prefs.dialect = el.dataset.d === 'kql' ? 'kql' : 'spl';
+      cqOut = null;
+      ctx.save();
+      const box = document.getElementById('siem-q-box');
+      if (box) box.outerHTML = caseQueryHtml(caseById(inv.caseId));
+      return true;
+    }
     case 'career':
       renderCareer();
       return true;
@@ -1245,6 +1344,12 @@ function rerenderKeepScroll(anchorId) {
 /** input / change events (search box, selects, write-ups, escalation checkboxes). */
 export function handleInput(e) {
   const t = e.target;
+  if (inv && t.id === 'siem-q') {
+    const d = cqDialect();
+    inv.cq = { ...(inv.cq || {}), open: true, text: { ...(inv.cq?.text || {}), [d]: t.value } };
+    if (e.type === 'change') ctx.save();
+    return undefined;
+  }
   if (inv && t.id === 'siem-text') {
     live = t.value;
     if (e.type === 'change') return commitQuery();
@@ -1294,6 +1399,11 @@ export function handleInput(e) {
 
 /** Keyboard: Enter in the search box commits the search right away. */
 export function handleKey(e) {
+  if (inv && e.target.id === 'siem-q' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    runCaseQueryBar(caseById(inv.caseId));
+    return;
+  }
   if (inv && e.target.id === 'siem-text' && e.key === 'Enter') {
     e.preventDefault();
     live = e.target.value;

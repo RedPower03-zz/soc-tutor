@@ -12,6 +12,7 @@
 import { ensureState, isMastered, indexContent } from './engine.js';
 import { ensureGame, retroGame, computeRank, levelForXp, checkBadges, RANKS, rankIndex } from './game.js';
 import { SCHED, addDays, startOfDay } from './scheduler.js';
+import { ensureLab } from './lab/lab.js';
 
 export const CURRENT_VERSION = 3;
 
@@ -125,5 +126,8 @@ export function migrateState(st, content, now = Date.now()) {
     v = st.version;
   }
   st.game = ensureGame(st.game);
+  // Hands-on labs (added after v3): an additive, idempotent step, so every older save simply
+  // gains an empty st.lab and nothing else changes. No version bump is needed.
+  ensureLab(st);
   return st;
 }

@@ -8,6 +8,7 @@ import { icon } from './icons.js';
 import { rankInsignia } from './insignia.js';
 import * as OPS from './ops-ui.js';
 import * as BACKUP from './backup-ui.js';
+import * as LAB from './lab-ui.js';
 
 const app = document.getElementById('app');
 const idx = E.indexContent(CONTENT);
@@ -511,6 +512,7 @@ function renderHome() {
     ${firstVisit ? '' : operatorPanel()}
     ${hero}
     ${firstVisit ? '' : OPS.operationsPanel()}
+    ${firstVisit ? '' : LAB.labsPanel()}
     ${panel({ title: 'Skill map', icon: 'grid', meta: 'Tap a skill to drill it', cls: 'skillmap', body: tracks })}
     <footer class="footer">
       <p>Progress is saved in this browser on this device.</p>
@@ -531,7 +533,7 @@ function renderSkillRow(s) {
   const lessonBtn = lesson
     ? `<button class="skill-lesson ${ls.completed ? 'done' : ''}" data-action="open-lesson" data-skill="${s.id}" aria-label="Lesson: ${esc(s.name)}${ls.completed ? ' (completed)' : ''}" title="Lesson">${icon('book')}<span>${ls.completed ? 'Done' : 'Lesson'}</span></button>`
     : '';
-  return `<div class="skill-wrap">${skillButton(s, status, ss, clickable, needs, p)}${lessonBtn}</div>`;
+  return `<div class="skill-wrap">${skillButton(s, status, ss, clickable, needs, p)}${LAB.skillLabButton(s.id)}${lessonBtn}</div>`;
 }
 
 function skillButton(s, status, ss, clickable, needs, p) {
@@ -1566,15 +1568,41 @@ app.addEventListener('click', (e) => {
       }
       return undefined;
     default:
-      if (!BACKUP.handleClick(action, el)) OPS.handleClick(action, el);
+      if (!BACKUP.handleClick(action, el) && !OPS.handleClick(action, el)) LAB.handleClick(action, el);
       return undefined;
   }
 });
 app.addEventListener('input', OPS.handleInput);
 app.addEventListener('change', OPS.handleInput);
 app.addEventListener('keydown', OPS.handleKey);
+app.addEventListener('input', LAB.handleInput);
+app.addEventListener('change', LAB.handleInput);
+app.addEventListener('keydown', LAB.handleKey);
 
 OPS.initOps({
+  getState: () => state,
+  save,
+  now,
+  render,
+  statusBar,
+  panel,
+  chip,
+  esc,
+  rich,
+  pad,
+  bar,
+  xpToast,
+  queueAchievements,
+  refreshStatusXp,
+  skillName,
+  setScreen: () => {
+    session = null;
+    current = null;
+    lessonView = null;
+  },
+});
+
+LAB.initLab({
   getState: () => state,
   save,
   now,

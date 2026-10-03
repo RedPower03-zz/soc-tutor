@@ -13,6 +13,7 @@
 //    clearing missed questions, finishing the day's due reviews.
 import * as E from './engine.js';
 import { RANKS as CAREER_RANKS, TIERS as CAREER_TIERS } from '../content/career.js';
+import { LAB_XP, labStats, labBudget } from './lab/lab.js';
 
 // ------------------------------------------------------------------ config
 
@@ -65,7 +66,11 @@ export const XP_TABLE = [
   ['First shift: each stage / escalation report (× score)', `${XP_RULES.capstoneStage} / ${XP_RULES.escalation}`],
   ['Night-shift lead: each stage / shift handover (× score)', '50 / 500'],
   ['Major incident: each stage / incident report (× score)', '75 / 800'],
-  ['Replaying a case or stage', 'only the improvement on your best score'],
+  ['Query challenge: easy / medium / hard (−15% per hint)', `${LAB_XP.query[1]} / ${LAB_XP.query[2]} / ${LAB_XP.query[3]}`],
+  ['Query challenge solved in both SPL and KQL', `+${LAB_XP.dialectBonus}`],
+  ['Packet capture: easy / medium / hard (× score)', `${LAB_XP.packet[1]} / ${LAB_XP.packet[2]} / ${LAB_XP.packet[3]}`],
+  ['Detection rule, perfect replay: easy / medium / hard', `${LAB_XP.rule[1]} / ${LAB_XP.rule[2]} / ${LAB_XP.rule[3]}`],
+  ['Replaying a case, stage or lab', 'only the improvement on your best score'],
   ['Easy question in a skill you already mastered', `${XP_RULES.masteredEasy}`],
   ['Harder question in a mastered skill', `×${XP_RULES.masteredRepeatFactor}`],
   ['Same skill, same day: answers 16–30 / 31+', '×0.5 / ×0.25'],
@@ -157,6 +162,9 @@ export const BADGES = [
   { id: 'shift-lead', name: 'Shift Lead', icon: 'flag', title: 'Shift Lead', description: 'Finish the Night-shift lead capstone with a passing handover.', progress: (g, st) => count(st.capstones?.['night-shift-lead']?.completedAt ? 1 : 0, 1) },
   { id: 'incident-commander', name: 'Incident Commander', icon: 'shield', title: 'Incident Commander', description: 'Finish the Major incident capstone with a passing report.', progress: (g, st) => count(st.capstones?.['major-incident']?.completedAt ? 1 : 0, 1) },
   { id: 'clean-handoff', name: 'Clean Handoff', icon: 'check', description: 'Score 85% or more on an escalation report.', progress: (g) => count(g.counters.cleanHandoffs, 1) },
+  { id: 'query-wizard', name: 'Query Wizard', icon: 'terminal', title: 'Query Wizard', description: 'Solve 10 query challenges in the Query lab (SPL or KQL).', progress: (g, st) => count(labStats(st).queriesSolved, 10) },
+  { id: 'wire-watcher', name: 'Wire Watcher', icon: 'network', title: 'Wire Watcher', description: 'Solve 6 packet-lab captures.', progress: (g, st) => count(labStats(st).packetsSolved, 6) },
+  { id: 'rule-smith', name: 'Rule Smith', icon: 'target', title: 'Rule Smith', description: 'Write 4 detection rules that score a perfect replay.', progress: (g, st) => count(labStats(st).rulesPerfect, 4) },
   { id: 'on-watch-1', name: 'On Watch I', icon: 'flame', description: 'Study 3 days in a row.', progress: (g) => count(g.streak.best, 3) },
   { id: 'on-watch-2', name: 'On Watch II', icon: 'flame', description: 'Study 7 days in a row.', progress: (g) => count(g.streak.best, 7) },
   { id: 'on-watch-3', name: 'On Watch III', icon: 'flame', title: 'Watch Commander', description: 'Study 30 days in a row.', progress: (g) => count(g.streak.best, 30) },
@@ -712,6 +720,16 @@ export function onLookup(game, st, content, now) {
   return { streak, badges };
 }
 
+/**
+ * Hands-on labs (query challenges, packet cases, rule exercises). The lab module works out the
+ * improvement-only XP (js/lab/lab.js); this pays it and updates level, rank and badges.
+ */
+export function onLab(game, st, content, { xp = 0, breakdown = [], reason = 'lab', now }) {
+  const streak = touchStreak(game, now);
+  const changes = commit(game, st, content, now, xp, reason);
+  return { xp, breakdown, streak, ...changes };
+}
+
 // ------------------------------------------------------------------ XP budget
 
 /** Assumed extra from a month of daily reviews: the daily bonus plus ~10 review answers at ~7 XP. */
@@ -738,14 +756,15 @@ export function xpBudget(content) {
     .filter((s) => s.kind === 'capstone' && s.status !== 'in-development')
     .reduce((a, s) => a + s.stages.length * capstoneRates(s).stage + (s.escalation ? capstoneRates(s).report : 0), 0);
   const foundations = answers + mastery + lessons + misconceptions;
-  const operations = siem + capstone;
+  const lab = labBudget(content).total; // hands-on labs, only for levels whose tier is available
+  const operations = siem + capstone + lab;
   const total = foundations + operations;
   const withMonth = total + MONTH_OF_REVIEWS;
   const at = (xp) => {
     const rank = reachableRank(content, xp);
     return { xp, level: levelForXp(xp), rank, rankIndex: rankIndex(rank.id), ladderPct: Math.round((rankIndex(rank.id) / (RANKS.length - 1)) * 100) };
   };
-  return { items: items.length, answers, mastery, lessons, misconceptions, siem, capstone, foundations, operations, total, withMonth, atTotal: at(total), atMonth: at(withMonth) };
+  return { items: items.length, answers, mastery, lessons, misconceptions, siem, capstone, foundations, operations, lab, total, withMonth, atTotal: at(total), atMonth: at(withMonth) };
 }
 
 // ------------------------------------------------------------------ migration helper
