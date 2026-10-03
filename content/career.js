@@ -75,7 +75,8 @@ export const RANKS = [
   // Stream A Oct 2026 pool expansion: L1+L2 + 1 month of reviews stays below
   // Senior Analyst II; all content alone lands around Threat Hunter (rank ~12);
   // SOC Manager needs ~3 months of daily reviews on top of finishing everything.
-  { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 27500, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
+  // l2-intel added ~950 XP to L1+L2; +1 month of reviews must stay under this bar.
+  { id: 'senior-2', title: 'Senior Analyst II', band: 'l3', xp: 28500, gates: [{ type: 'mastered', tier: 'l3', count: 2 }] },
   { id: 'responder', title: 'Incident Responder', band: 'l3', xp: 29000, gates: [{ type: 'skills', skills: ['l2-ir', 'l3-forensics'] }] },
   { id: 'hunter', title: 'Threat Hunter', band: 'l3', xp: 30500, gates: [{ type: 'skills', skills: ['l2-hunting', 'l3-identity'] }] },
   { id: 'detection', title: 'Detection Engineer', band: 'l3', xp: 33500, gates: [{ type: 'skills', skills: ['l2-siem', 'l3-detection'] }] },

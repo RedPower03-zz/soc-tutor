@@ -116,7 +116,7 @@ The dashboard **Operations** panel holds three activities: **Mixed practice**, *
 
 Each case starts with an alert. You search a simulated log table that mixes up to seven sources: **WIN** (Windows Security events), **PROC** (process creation), **FW** (firewall and VPN), **DNS**, **PRXY** (web proxy), **IDP** (cloud sign-in logs) and **OPS** (ops and SIEM health: agent status, connector gaps, retention, on-call pages, change calendar). Tools:
 - A free-text search box, source chips with row counts, and host / user / event type / time-window filters. On a phone these sit in a sticky bar; the time windows are built from the case's own timestamps.
-- Tapping a row expands it and offers **pivots**, such as *this host*, *this user*, *this IP* or *this domain*, so you can jump from a firewall line to the DNS lookup and then to the process that made it.
+- Tapping a row expands it and offers **pivots**, such as *this host*, *this user*, *this IP* or *this domain*, so you can jump from a firewall line to the DNS lookup and then to the process that made it. IPs, domains and SHA-256 hashes also have a **Lookup** button (fictional WHOIS, reputation, passive DNS and sandbox; unknown is not clean).
 - **Pin as evidence** adds the row to a tray. The tray shows the pin count and jumps to the verdict panel.
 - **Verdict:** true positive, benign true positive or false positive. You justify it with your pinned evidence plus a 1–3 sentence write-up.
 
@@ -217,6 +217,7 @@ Level 2 is built to the same standard as Level 1. Each skill has a lesson (4–5
 | Vulnerability management (`l2-vuln`) | Ports & services, Alert triage | Reading scanner reports, CVE vs CWE, CVSS v3.1 / v4.0 vectors, EPSS and CISA KEV, prioritising by exposure and asset criticality, scan false positives, credentialed vs unauthenticated scans, patch vs compensating control, exceptions and SLAs, verifying remediation, reporting; light ASM / cloud-posture extension (30+ questions) |
 | Web application attacks (`l2-web`) | HTTP, Alert triage | SQLi, XSS, LFI/RFI and path traversal, command injection, SSRF, web shells, credential stuffing vs spraying and directory brute force in access and WAF logs; URL decoding; status codes; WAF limits; OWASP Top 10 2021 and 2025 (30+ questions) |
 | IDS/IPS & network monitoring (`l2-ids`) | Firewall logs, Alert triage | Snort/Suricata rule anatomy (header, flow, content, sticky buffers, pcre, sid/rev, thresholds), eve.json alerts and verdicts, Zeek conn/dns/http/ssl/notice logs, tuning noisy signatures, IDS vs IPS placement and fail-open trade-offs (30+ questions) |
+| Threat intelligence (`l2-intel`) | Malware basics, ATT&CK | Intel levels, TLP 2.0 (CLEAR, AMBER+STRICT), Pyramid of Pain, Diamond Model, IOC vs IOA vs TTP, STIX/TAXII, MISP, Admiralty code, IOC aging and enrichment. Case logs can look up a fictional WHOIS, reputation, passive DNS and sandbox record (30+ questions) |
 
 **Level 2 SIEM cases** (`content/l2/siem-cases.js`) open once you have learned the Level 2 skills they rely on. They add two new log sources, *Mail gateway* and *Malware sandbox*:
 
@@ -421,7 +422,7 @@ The dashboard **Operator** panel shows your rank insignia (chevrons for the sub-
 
 Your current title, level and XP bar sit in the status bar and the **Operator** panel on the dashboard.
 
-**Badges** (35, including 4 secret ones that show as "???" until earned). The **Profile & badges** screen shows earned badges, locked silhouettes and your progress toward each one.
+**Badges** (36, including 4 secret ones that show as "???" until earned). The **Profile & badges** screen shows earned badges, locked silhouettes and your progress toward each one.
 
 | Badge | How to earn it | Unlocks title |
 | --- | --- | --- |
@@ -460,6 +461,7 @@ Your current title, level and XP bar sit in the status bar and the **Operator** 
 | Overqualified *(secret)* | Ace every question in the placement check. |  |
 | Grace Under Fire *(secret)* | Have a grace day keep your streak alive. |  |
 | Root Cause *(secret)* | Uncover a gap two building blocks deep. | Root Cause Analyst |
+| Source Check | Look up 3 IPs, domains or hashes in the indicator panel. | Enricher |
 
 **Study streak.** Your streak counts the days you study. Each calendar week you study banks one grace day, up to 2. If you miss a day, a banked grace day covers it automatically. If you miss more days than you have grace days, a fresh streak simply starts; nothing else is lost. There are no guilt messages.
 
