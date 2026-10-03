@@ -32,7 +32,7 @@ The course is planned as three curriculum levels (`content/career.js` → `TIERS
 | Tier | Tracks | Status |
 | --- | --- | --- |
 | **Level 1 Foundations** | Host basics, Network basics (13 skills) plus SIEM investigations and the *First shift* capstone | Live |
-| **Level 2 SOC Operations** | Alert triage, SIEM & log analysis, phishing analysis, malware analysis basics, MITRE ATT&CK, incident response, threat hunting (7 skills) plus 4 Level 2 SIEM cases and the *Night-shift lead* capstone | Live |
+| **Level 2 SOC Operations** | Alert triage, SIEM & log analysis, phishing analysis, malware analysis basics, MITRE ATT&CK, incident response, threat hunting (7 skills) plus 12 Level 2 SIEM cases and the *Night-shift lead* capstone | Live |
 | **Level 3 Advanced** | PKI & certificates, applied cryptography, identity/AD & Kerberos, cloud security, digital forensics, detection engineering (6 skills) plus 4 Level 3 SIEM cases and the *Major incident* capstone | Live |
 
 ## Hands-on labs
@@ -231,12 +231,20 @@ Level 2 is built to the same standard as Level 1. Each skill has a lesson (4–5
 | Scripting, regex & playbooks (`l2-scripting`) | SIEM queries, Processes | Read and debug short PowerShell, Python and Bash; recognise malicious PowerShell shown as text; regex for logs; JSON vs CSV; playbook step order (30+ questions) |
 | Cloud & SaaS identity (`l2-saas`) | Phishing, Alert triage | Entra sign-in codes, Microsoft 365 audit (mail, rules, consent), Okta System Log, AiTM, MFA fatigue, illicit OAuth consent, impossible-travel caveats, session revocation versus password reset (30+ questions). Does not replace the Level 3 cloud or identity skills. |
 
-**Level 2 SIEM cases** (`content/l2/siem-cases.js`) open once you have learned the Level 2 skills they rely on. They add two new log sources, *Mail gateway* and *Malware sandbox*:
+**Level 2 SIEM cases** (`content/l2/siem-cases.js`) open once you have learned the Level 2 skills they rely on. Later cases add *Mail gateway*, *Malware sandbox* and *IDS / NSM* (span-port Suricata and Zeek):
 
 - **Payroll update phish** (medium, phishing): a lookalike domain that passes SPF/DKIM/DMARC for itself, an AiTM login relay and a new inbox rule. True positive.
 - **ISO loader** (medium, malware): ISO + LNK → rundll32 → scheduled task → C2, with a sandbox report. True positive.
 - **Mass file rename** (medium, triage): looks like ransomware, but it is an approved archive job under a change ticket. Benign true positive.
 - **RC4 service tickets** (hard, **ambiguous**): Kerberoasting or a new asset-discovery pilot? There is an EDR gap, so you are graded on your reasoning, confidence, what is missing and your next steps.
+- **Search-box SQLi** (medium, web): a UNION SELECT that returned rows because the WAF was detection-only. True positive.
+- **Directory wordlist** (hard, **ambiguous**): an external path walk during a scan window, from an address the change ticket does not name.
+- **MFA then a forward** (hard, cloud identity): a proxied session, a mailbox rule and an OAuth grant. True positive.
+- **Two cities, one laptop** (medium, **ambiguous**): impossible travel onto the company VPN range.
+- **KEV on the portal** (medium, vuln): a fictional critical on an internet-facing host, with exploit traffic and no exception. True positive.
+- **The version that lied** (medium, vuln): a banner-only openssl finding on a backported internal package. Benign true positive.
+- **Signature allowed** (medium, IDS): an alert-only span, Zeek `sf` beacons, and an unsigned DLL. True positive.
+- **Look it up** (hard, intel): enrich the domain, IP and hash in the indicator panel before you touch the company CDN. True positive.
 
 **Capstone: Night-shift lead** (`content/l2/night-shift.js`) gates Senior Analyst I. You are alone on the overnight desk with six alerts in the queue:
 
