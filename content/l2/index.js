@@ -11,8 +11,9 @@ import { HUNTING } from './hunting.js';
 import { VULN } from './vuln.js';
 import { WEB } from './web.js';
 import { IDS } from './ids.js';
+import { INTEL } from './intel.js';
 
-const PARTS = [TRIAGE, SIEM, PHISHING, MALWARE, ATTACK, IR, HUNTING, VULN, WEB, IDS];
+const PARTS = [TRIAGE, SIEM, PHISHING, MALWARE, ATTACK, IR, HUNTING, VULN, WEB, IDS, INTEL];
 
 export const L2 = {
   track: L2_TRACK,

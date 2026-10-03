@@ -191,8 +191,9 @@ test('level-up is reported when crossing a threshold', () => {
 
 // ------------------------------------------------------------------ badges
 
-test('badge catalogue: 25–35 badges with unique ids, descriptions and some secrets', () => {
-  assert.ok(G.BADGES.length >= 25 && G.BADGES.length <= 35, `${G.BADGES.length} badges`);
+test('badge catalogue: 25–42 badges with unique ids, descriptions and some secrets', () => {
+  // Upper bound raised for Stream C specialist badges (enrichment, scripting, cloud identity).
+  assert.ok(G.BADGES.length >= 25 && G.BADGES.length <= 42, `${G.BADGES.length} badges`);
   assert.equal(new Set(G.BADGES.map((b) => b.id)).size, G.BADGES.length);
   for (const b of G.BADGES) assert.ok(b.name && b.description && b.icon && typeof b.progress === 'function', b.id);
   assert.ok(G.BADGES.filter((b) => b.hidden).length >= 3);

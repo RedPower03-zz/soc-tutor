@@ -2,6 +2,7 @@
 // Screens render into #app through the helpers app.js passes in (see initOps).
 import { CONTENT } from '../content/index.js';
 import { SIEM_SOURCES, VERDICTS, CONFIDENCE, NEXT_STEPS } from '../content/siem-cases.js';
+import { lookupIndicator } from '../content/intel-lookup.js';
 import * as E from './engine.js';
 import * as G from './game.js';
 import * as S from './siem.js';
@@ -293,6 +294,7 @@ export function renderSiemList() {
       body: `<ol class="howto small">
           <li><b>Read the alert.</b> Note the host, user and time.</li>
           <li><b>Search and filter</b> the logs by source, host, user, event type, time or free text. Tap a row to pivot on its IPs, domains, host or user.</li>
+          <li><b>Look up</b> an IP, domain or hash (WHOIS, reputation, passive DNS, sandbox). The feeds are fictional.</li>
           <li><b>Pin the evidence</b> that proves your case (and only that).</li>
           <li><b>Make the call</b>: true positive, benign true positive or false positive, with a short write-up.</li>
         </ol>
@@ -351,7 +353,7 @@ function logRow(r, { interactive = true, pinned = false, expanded = false, mark 
         expanded
           ? `<div class="lg-actions">
               <button class="btn mini ${pinned ? 'secondary' : 'primary'} pin-btn" data-action="siem-pin" data-row="${r.id}">${icon('pin')}${pinned ? 'Unpin' : 'Pin as evidence'}</button>
-              <div class="pivots"><span class="label">Pivot to</span>${pv.map((p) => `<button class="pivot" data-action="siem-pivot" data-kind="${p.kind}" data-value="${esc(p.value)}"><span>${p.kind}</span>${esc(p.value)}</button>`).join('')}</div>
+              <div class="pivots"><span class="label">Pivot to</span>${pv.map((p) => `<button class="pivot" data-action="siem-pivot" data-kind="${p.kind}" data-value="${esc(p.value)}"><span>${p.kind}</span>${esc(p.value)}</button>`).join('')}${pv.filter((p) => p.kind === 'ip' || p.kind === 'domain' || p.kind === 'hash').map((p) => `<button class="pivot lookup" data-action="siem-lookup" data-value="${esc(p.value)}"><span>lookup</span>${esc(p.value)}</button>`).join('')}</div>
             </div>`
           : ''
       }
@@ -402,6 +404,33 @@ function trayHtml() {
     <button class="btn mini primary" data-action="siem-goto-verdict">${icon('send')}Verdict</button>`;
 }
 
+
+function lookupHtml(result) {
+  if (!result) return '<p class="empty small">Look up an IP, domain or hash from a log row, or type one here. Fictional feeds only. Unknown is not clean.</p>';
+  const rep = result.reputation || {};
+  const rows = (result.whois?.fields || []).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('');
+  const pdns = (result.pdns || []).length
+    ? `<ul class="lookup-pdns">${result.pdns.map((r) => `<li class="mono">${esc(r.name || result.indicator)} ${r.ip ? '→ ' + esc(r.ip) : ''} <span>${esc(r.first || '')} – ${esc(r.last || '')}</span></li>`).join('')}</ul>`
+    : '<p class="small muted">No passive DNS rows.</p>';
+  return `<div class="lookup-head"><b class="mono">${esc(result.indicator || '')}</b><span class="lookup-verdict v-${esc(rep.verdict || 'unknown')}">${esc(rep.verdict || 'unknown')}</span>${result.kind ? `<span class="mono dim">${esc(result.kind)}</span>` : ''}</div>
+    <section><h4>WHOIS</h4><p class="small">${esc(result.whois?.summary || '')}</p>${rows ? `<dl class="lookup-fields mono">${rows}</dl>` : ''}</section>
+    <section><h4>Reputation</h4><p class="small">${esc(rep.note || '')}${rep.sources ? ` · ${rep.sources} source${rep.sources === 1 ? '' : 's'}` : ''}${rep.score != null ? ` · score ${rep.score}` : ''}</p>${(rep.tags || []).map((tag) => `<span class="lookup-tag">${esc(tag)}</span>`).join('')}</section>
+    <section><h4>Passive DNS</h4>${pdns}</section>
+    <section><h4>Sandbox</h4><p class="small">${result.sandbox?.family ? `<b>${esc(result.sandbox.family)}</b> · ` : ''}${esc(result.sandbox?.verdict || 'n/a')}. ${esc(result.sandbox?.note || '')}</p></section>`;
+}
+
+function runLookup(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return;
+  const result = lookupIndicator(value);
+  inv.enrich = { indicator: result.indicator, at: ctx.now() };
+  const gain = G.onLookup(st().game, st(), CONTENT, ctx.now());
+  ctx.save();
+  const box = document.getElementById('intel-lookup-body');
+  if (box) box.innerHTML = lookupHtml(result);
+  if (gain.badges?.length) ctx.queueAchievements?.({ badges: gain.badges });
+}
+
 function renderInvestigation() {
   const c = caseById(inv.caseId);
   const a = c.alert;
@@ -424,6 +453,10 @@ function renderInvestigation() {
       <div class="sf-status mono" id="siem-status" aria-live="polite">${statusHtml(c, res.count)}</div>
     </div>
     <div class="sf-selects" id="siem-selects">${selectsHtml(c)}</div>
+    <section class="intel-lookup" id="intel-lookup" aria-label="Indicator lookup">
+      <div class="lookup-bar">${icon('search')}<input id="intel-lookup-input" type="search" inputmode="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Lookup IP, domain or hash" aria-label="Indicator to look up" value="${esc(inv.enrich?.indicator || '')}"><button class="btn mini primary" data-action="siem-lookup-go">Lookup</button></div>
+      <div id="intel-lookup-body">${lookupHtml(inv.enrich?.indicator ? lookupIndicator(inv.enrich.indicator) : null)}</div>
+    </section>
     <ol class="log-list" id="siem-results">${res.html}</ol>
     <div class="siem-tray" id="siem-tray">${trayHtml()}</div>
     </div>
@@ -1096,6 +1129,13 @@ export function handleClick(action, el) {
       document.getElementById('siem-filters')?.scrollIntoView({ block: 'start' });
       return true;
     }
+    case 'siem-lookup':
+      runLookup(el.dataset.value);
+      document.getElementById('intel-lookup')?.scrollIntoView({ block: 'nearest' });
+      return true;
+    case 'siem-lookup-go':
+      runLookup(document.getElementById('intel-lookup-input')?.value);
+      return true;
     case 'siem-top':
       document.getElementById('siem-filters')?.scrollIntoView({ block: 'start' });
       return true;
@@ -1259,5 +1299,9 @@ export function handleKey(e) {
     live = e.target.value;
     commitQuery();
     e.target.blur();
+  }
+  if (inv && e.target.id === 'intel-lookup-input' && e.key === 'Enter') {
+    e.preventDefault();
+    runLookup(e.target.value);
   }
 }

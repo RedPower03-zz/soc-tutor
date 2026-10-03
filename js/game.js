@@ -166,6 +166,7 @@ export const BADGES = [
   { id: 'overqualified', name: 'Overqualified', icon: 'award', hidden: true, description: 'Ace every question in the placement check.', progress: (g) => count(g.counters.placementPerfect, 1) },
   { id: 'grace-under-fire', name: 'Grace Under Fire', icon: 'shield', hidden: true, description: 'Have a grace day keep your streak alive.', progress: (g) => count(g.streak.freezesUsed, 1) },
   { id: 'root-cause', name: 'Root Cause', icon: 'layers', hidden: true, title: 'Root Cause Analyst', description: 'Uncover a gap two building blocks deep.', progress: (g) => count(g.counters.deepGaps, 1) },
+  { id: 'source-check', name: 'Source Check', icon: 'search', title: 'Enricher', description: 'Look up 3 IPs, domains or hashes in the indicator panel.', progress: (g) => count(g.counters.lookups || 0, 3) },
 ];
 
 // ------------------------------------------------------------------ state
@@ -210,6 +211,7 @@ export function createGame() {
       perfectEvidence: 0,
       benignCleared: 0,
       calibratedCalls: 0,
+      lookups: 0,
       capstonesDone: 0,
       cleanHandoffs: 0,
     },
@@ -700,6 +702,14 @@ export function onEscalation(game, st, content, { scenario, result, now }) {
   const breakdown = amount > 0 ? [{ label: `${scenario.escalation?.ui?.title || 'Escalation report'} ${result.total}/100`, amount }] : [];
   const changes = commit(game, st, content, now, amount, `${scenario.id} escalation: ${breakdown.map((b) => b.label).join('') || 'no new XP'}`);
   return { xp: amount, breakdown, streak, ...changes };
+}
+
+/** Counts an indicator lookup (SIEM panel). No XP; it can earn Source Check. */
+export function onLookup(game, st, content, now) {
+  game.counters.lookups = (game.counters.lookups || 0) + 1;
+  const streak = touchStreak(game, now);
+  const badges = checkBadges(game, st, content, now);
+  return { streak, badges };
 }
 
 // ------------------------------------------------------------------ XP budget

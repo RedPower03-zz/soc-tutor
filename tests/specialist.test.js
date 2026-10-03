@@ -8,7 +8,7 @@ import * as E from '../js/engine.js';
 import { CONTENT } from '../content/index.js';
 
 const idx = E.indexContent(CONTENT);
-const SPECIALIST = ['l2-vuln', 'l2-web', 'l2-ids'];
+const SPECIALIST = ['l2-vuln', 'l2-web', 'l2-ids', 'l2-intel'];
 const HIGHER = new Set(['apply', 'analyze', 'evaluate', 'create']);
 const BLOOM = new Set(['remember', 'understand', ...HIGHER]);
 const itemsOf = (id) => CONTENT.items.filter((i) => i.skill === id);
@@ -88,4 +88,12 @@ test('IDS/NSM anchors: rule anatomy, eve.json, Zeek fields and states, tuning, p
     assert.ok(t.includes(k), `ids: ${k}`);
   // Suricata severity: 1 is the most urgent
   assert.equal(CONTENT.items.find((i) => i.id === 'ids-07').answer, '1');
+});
+
+test('threat intel anchors: TLP 2.0, Pyramid, Diamond, STIX/TAXII, MISP, Admiralty, aging', () => {
+  const t = text('l2-intel');
+  for (const k of ['tlp:clear', 'tlp:amber+strict', 'tlp:red', 'tlp:green', 'pyramid', 'diamond', 'infrastructure', 'ioc', 'ioa', 'stix', 'taxii', 'misp', 'admiralty', 'b2', 'passive dns', 'whois', 'valid_until', 'to_ids'])
+    assert.ok(t.includes(k), `intel: ${k}`);
+  assert.equal(CONTENT.items.find((i) => i.id === 'ti-02').accept[0], 'tlp:clear');
+  assert.equal(CONTENT.items.find((i) => i.id === 'ti-13').answer, 'Usually reliable source, probably true');
 });

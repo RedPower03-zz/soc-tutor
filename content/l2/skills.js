@@ -7,7 +7,7 @@
 export const L2_TRACK = {
   id: 'soc',
   name: 'SOC operations (Level 2)',
-  description: 'Real analyst workflows built on the basics: triage, SIEM, phishing, malware, ATT&CK, incident response, hunting, vulnerability management, web attacks and network security monitoring.',
+  description: 'Real analyst workflows built on the basics: triage, SIEM, phishing, malware, ATT&CK, incident response, hunting, vulnerability management, web attacks, network security monitoring and threat intelligence.',
   comingSoon: false,
 };
 
@@ -101,5 +101,14 @@ export const L2_SKILLS = [
     order: 29,
     prereqs: ['net-fw-logs', 'l2-alert-triage'],
     summary: 'Snort/Suricata rules, eve.json alerts, Zeek conn/dns/http/ssl/notice logs, tuning noisy signatures, IDS vs IPS placement.',
+  },
+  {
+    id: 'l2-intel',
+    name: 'Threat intelligence',
+    track: 'soc',
+    level: 2,
+    order: 30,
+    prereqs: ['l2-malware', 'l2-attack'],
+    summary: 'Intel levels, TLP 2.0, Pyramid of Pain, Diamond Model, IOC/IOA/TTP, STIX/TAXII, MISP, Admiralty grades, IOC aging and enrichment.',
   },
 ];

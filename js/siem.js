@@ -109,6 +109,7 @@ export function pivots(r) {
   for (const m of r.msg.matchAll(/\b((?:[a-z0-9-]+\.)+(?:example|test|invalid|com|net|org))\b/gi)) {
     if (!/in-addr\.arpa$/i.test(m[1])) add('domain', m[1].toLowerCase());
   }
+  for (const m of r.msg.matchAll(/\b([a-f0-9]{64})\b/gi)) add('hash', m[1].toLowerCase());
   return out;
 }
 
